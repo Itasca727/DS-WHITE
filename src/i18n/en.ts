@@ -68,6 +68,8 @@ export const en = {
   historySearchClear: 'Clear',
   historySearchHintSub: 'Type a word to look through everything we said',
   historySearchCount: '{count} match(es)',
+  historySearchCountPending: '{count} found so far, still looking…',
+  historySearchFailed: 'Could not read local chats. Reopen the page and try again',
   historySearchCountMore: 'Too many matches, showing the latest {count}',
   historySearchMore: 'Show more ({count} left)',
   jumpTargetMissing: 'That message is gone — it may have been deleted',

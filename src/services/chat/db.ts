@@ -91,6 +91,14 @@ export const loadSessionSummaries = async (): Promise<SessionSummary[]> =>
 export const loadSession = async (id: string): Promise<Session | undefined> =>
   (await getDB()).get('sessions', id)
 
+/** 一个事务里读多段会话（历史搜索用）：比逐段开事务快得多，尤其在 iOS 上 */
+export const loadSessions = async (ids: string[]): Promise<(Session | undefined)[]> => {
+  const tx = (await getDB()).transaction('sessions', 'readonly')
+  const sessions = await Promise.all(ids.map((id) => tx.store.get(id)))
+  await tx.done
+  return sessions
+}
+
 export const saveSession = async (session: Session, files: StoredFile[] = []): Promise<void> => {
   const summary = storedSummary(session)
   const tx = (await getDB()).transaction(['sessions', 'sessionSummaries', 'files'], 'readwrite')

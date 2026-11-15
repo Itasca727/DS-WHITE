@@ -3,8 +3,8 @@ import { Fragment, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useTranslate } from '../../i18n/index.js'
 import {
-  clearSearchCache,
   searchHistory,
+  type HistorySearchOutput,
   type HistorySearchResult,
 } from '../../services/chat/search.js'
 import { openSessionAt } from '../../services/chat/store.js'
@@ -72,6 +72,9 @@ export const HistorySearchPage = () => {
   const [results, setResults] = useState<HistorySearchResult[]>([])
   const [searching, setSearching] = useState(false)
   const [truncated, setTruncated] = useState(false)
+  /** 结果是边搜边出的：还没搜完 */
+  const [pending, setPending] = useState(false)
+  const [failed, setFailed] = useState(false)
   // 结果一次只渲染一批，滚到底或点「显示更多」再接着显示
   const [shown, setShown] = useState(PAGE)
   // 每次搜索换一批 key，让结果按顺序依次浮现
@@ -97,15 +100,37 @@ export const HistorySearchPage = () => {
       return
     }
     let live = true
+    let first = true
+    // 换了关键词就先清掉上一次的结果，不让旧结果冒充新结果
+    setResults([])
+    setTruncated(false)
+    setPending(true)
+    setFailed(false)
     setSearching(true)
+    const show = (found: HistorySearchOutput) => {
+      if (!live) {
+        return
+      }
+      setResults(found.results)
+      setTruncated(found.truncated)
+      setPending(found.pending)
+      if (first) {
+        // 只在这次搜索第一次出结果时重播浮现动画，后续追加不闪
+        first = false
+        setShown(PAGE)
+        setBatch((value) => value + 1)
+      }
+    }
     const timer = setTimeout(() => {
-      searchHistory(q, () => !live)
+      searchHistory(q, () => !live, show)
         .then((found) => {
-          if (live && found) {
-            setResults(found.results)
-            setTruncated(found.truncated)
-            setShown(PAGE)
-            setBatch((value) => value + 1)
+          if (found) {
+            show(found)
+          }
+        })
+        .catch(() => {
+          if (live) {
+            setFailed(true)
           }
         })
         .finally(() => {
@@ -130,7 +155,6 @@ export const HistorySearchPage = () => {
       setResults([])
       setTruncated(false)
       setShown(PAGE)
-      clearSearchCache()
     }, 320)
     return () => clearTimeout(timer)
   }, [open])
@@ -339,14 +363,21 @@ export const HistorySearchPage = () => {
         >
           {!q ? null : searching && results.length === 0 ? (
             <div className={styles.status}>{t('searching')}</div>
+          ) : failed && results.length === 0 ? (
+            <div className={styles.status}>{t('historySearchFailed')}</div>
           ) : results.length === 0 ? (
             <div className={styles.status}>{t('searchHistoryEmpty')}</div>
           ) : (
             <>
               <div className={styles.count}>
-                {t(truncated ? 'historySearchCountMore' : 'historySearchCount', {
-                  count: results.length,
-                })}
+                {t(
+                  searching && pending
+                    ? 'historySearchCountPending'
+                    : truncated
+                      ? 'historySearchCountMore'
+                      : 'historySearchCount',
+                  { count: results.length }
+                )}
               </div>
               {results.slice(0, shown).map((result, index) => (
                 <button

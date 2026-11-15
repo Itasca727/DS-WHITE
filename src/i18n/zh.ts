@@ -64,6 +64,8 @@ export const zh = {
   historySearchClear: '清空',
   historySearchHintSub: '输入一个词，翻找我们说过的话',
   historySearchCount: '找到 {count} 处',
+  historySearchCountPending: '已找到 {count} 处，还在往前翻…',
+  historySearchFailed: '读取本地对话时出错，请重新打开页面后再试',
   historySearchCountMore: '命中太多，显示最近的 {count} 处',
   historySearchMore: '显示更多（还有 {count} 处）',
   jumpTargetMissing: '没找到那条消息，可能已被删除',
