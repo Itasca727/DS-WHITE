@@ -16,7 +16,12 @@ import {
   getVisibleMessages,
   type MessageVersions,
 } from '../../services/chat/branches.js'
-import { selectMessageVersion } from '../../services/chat/store.js'
+import {
+  consumeJumpTarget,
+  selectMessageVersion,
+  useChatStore,
+} from '../../services/chat/store.js'
+import { showToast } from '../base/toastState.js'
 import type { Message, Session } from '../../services/chat/types.js'
 import { haptic } from '../../utils/haptic.js'
 import { IconChevronDownOutline14 } from '../base/icons.js'
@@ -64,6 +69,8 @@ const EMPTY_VERSIONS: MessageVersions = { ids: [], index: -1 }
 /** 首次只渲染最近这么多条；往上翻再分批加。 */
 const PAGE_SIZE = 60
 const PAGE_SIZE_MOBILE = 24
+/** 跳到某条消息时，它前面多渲染几条，往上翻不会马上碰到「加载更早」 */
+const JUMP_CONTEXT = 6
 /** 末尾这几条不做 content-visibility：正在输出、或刚发出的消息要实时布局。 */
 const LIVE_TAIL = 2
 const LONG_PRESS_MS = 450
@@ -76,6 +83,7 @@ const isTouch = typeof window !== 'undefined' && window.matchMedia?.('(pointer: 
  * 避免没有滚动锚定的 Safari 在消息重新进入视口时跳动。
  */
 const MessageItem = memo(function MessageItem({
+  messageId,
   live,
   entering,
   role,
@@ -85,6 +93,7 @@ const MessageItem = memo(function MessageItem({
   onLongPress,
   children,
 }: {
+  messageId: string
   live: boolean
   /** 刚发出 / 刚开始回复的消息：播放入场动画 */
   entering: boolean
@@ -175,6 +184,7 @@ const MessageItem = memo(function MessageItem({
   return (
     <div
       ref={ref}
+      data-msg={messageId}
       className={clsx(
         styles.item,
         enterClass,
@@ -282,7 +292,13 @@ export const MessageList = ({
     setPreviousVersions(versions)
   }
   const lastMessageId = messages.at(-1)?.id
-  const start = Math.max(0, messages.length - visibleCount)
+  // 从历史搜索跳进来：把目标消息之前留几条也一起渲染出来
+  const jumpTarget = useChatStore((state) => state.jumpTarget)
+  const target = jumpTarget?.sessionId === session.id ? jumpTarget : null
+  const targetIndex = target ? messages.findIndex((message) => message.id === target.messageId) : -1
+  const jumpCount = targetIndex >= 0 ? messages.length - targetIndex + JUMP_CONTEXT : 0
+  const renderCount = Math.max(visibleCount, jumpCount)
+  const start = Math.max(0, messages.length - renderCount)
   const startRef = useRef(start)
   startRef.current = start
   const messageCountRef = useRef(messages.length)
@@ -352,7 +368,7 @@ export const MessageList = ({
     requestFollow()
   }, [getScrollEl, loadEarlier, requestFollow])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     setVisibleCount(pageSize)
   }, [session.id, pageSize])
 
@@ -390,6 +406,77 @@ export const MessageList = ({
     lastUserScrollRef.current = 0
     stickNow()
   }, [session.id, lastMessageId, getScrollEl, stickNow])
+
+  const jumpPinRef = useRef<(() => void) | null>(null)
+  useEffect(() => () => jumpPinRef.current?.(), [])
+
+  // 历史搜索跳转：滚到那条消息（放在视口上部），闪一下标出来，暂停贴底跟随。
+  // 写在「切换会话贴底」之后，同一次提交里后执行，覆盖掉贴底。
+  useLayoutEffect(() => {
+    if (!target) {
+      return
+    }
+    const { nonce, messageId } = target
+    if (targetIndex < 0) {
+      if (messages.length > 0) {
+        showToast(t('jumpTargetMissing'))
+        consumeJumpTarget(nonce)
+      }
+      return
+    }
+    setVisibleCount((count) => Math.max(count, jumpCount))
+    consumeJumpTarget(nonce)
+    const el = getScrollEl()
+    const node = el?.querySelector<HTMLElement>(`[data-msg="${CSS.escape(messageId)}"]`)
+    if (!el || !node) {
+      return
+    }
+    jumpPinRef.current?.()
+    followRef.current = false
+    touchingRef.current = false
+    const startedAt = performance.now()
+    /** 把目标放到视口上部 18% 处 */
+    const align = () => {
+      const offset = node.getBoundingClientRect().top - el.getBoundingClientRect().top
+      const top = Math.max(0, el.scrollTop + offset - el.clientHeight * 0.18)
+      if (Math.abs(el.scrollTop - top) > 0.5) {
+        el.scrollTop = top
+        writtenTopRef.current = el.scrollTop
+        lastTopRef.current = el.scrollTop
+      }
+    }
+    align()
+    lastUserScrollRef.current = performance.now()
+    setJumpVisible(true)
+    // 刚打开时布局还在变（抽屉收起、宽度变化、正文渲染、图片加载），上面内容高度一变目标就会跑开：
+    // 一段时间内持续把它钉住，用户一碰屏幕就放手。
+    const content = columnRef.current
+    const observer = new ResizeObserver(() => {
+      if (lastGestureRef.current > startedAt || touchingRef.current) {
+        observer.disconnect()
+        return
+      }
+      align()
+    })
+    if (content) {
+      observer.observe(content)
+    }
+    observer.observe(el)
+    const release = setTimeout(() => observer.disconnect(), 2500)
+    node.classList.remove(styles.jumpFlash)
+    void node.offsetWidth
+    node.classList.add(styles.jumpFlash)
+    const timer = setTimeout(() => node.classList.remove(styles.jumpFlash), 2200)
+    // 目标消费后依赖会变，不能靠 effect 清理；下一次跳转或卸载时再收拾
+    jumpPinRef.current = () => {
+      clearTimeout(timer)
+      clearTimeout(release)
+      observer.disconnect()
+      node.classList.remove(styles.jumpFlash)
+    }
+    // 只在目标变化时执行
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [target?.nonce, targetIndex, messages.length > 0])
 
   // 加载更早的消息后保持当前阅读位置。
   useLayoutEffect(() => {
@@ -585,6 +672,7 @@ export const MessageList = ({
               return [
                 <MessageItem
                   key={message.id}
+                  messageId={message.id}
                   live={index > lastIndex - LIVE_TAIL}
                   entering={seen !== null && !seen.has(message.id) && index > lastIndex - LIVE_TAIL}
                   role={message.role}

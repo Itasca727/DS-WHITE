@@ -93,6 +93,8 @@ type ChatState = {
   contextDebug: Record<string, ContextDebug>
   /** 正在整理更早记忆（自动压缩）的会话 */
   compacting: Record<string, boolean>
+  /** 搜索结果点进来时要定位到的消息；对话列表消费后清空 */
+  jumpTarget: { sessionId: string; messageId: string; nonce: number } | null
 }
 
 export type ContextDebug = {
@@ -115,6 +117,7 @@ export const useChatStore = create<ChatState>(() => ({
   streaming: {},
   contextDebug: {},
   compacting: {},
+  jumpTarget: null,
 }))
 
 const { getState: get, setState: set } = useChatStore
@@ -595,6 +598,21 @@ export const setSummaryOverride = (sessionId: string, text: string) => {
     summaryOverride: text.trim() || undefined,
   }))
   persist(sessionId)
+}
+
+let jumpNonce = 0
+
+/** 打开会话并定位到某条消息（来自历史搜索）；messageId 为空时只打开会话。 */
+export const openSessionAt = (id: string, messageId: string | null) => {
+  set({ jumpTarget: messageId ? { sessionId: id, messageId, nonce: ++jumpNonce } : null })
+  selectSession(id)
+}
+
+/** 对话列表定位完成（或放弃）后清掉 */
+export const consumeJumpTarget = (nonce: number) => {
+  if (get().jumpTarget?.nonce === nonce) {
+    set({ jumpTarget: null })
+  }
 }
 
 export const selectSession = (id: string) => {

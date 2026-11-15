@@ -43,18 +43,58 @@ const readBytes = async (file: File, start: number, length: number) => {
   return bytes
 }
 
-/** ZIP64、分卷与加密文件不属于导出格式，一律拒绝。 */
-const checkExtra = (bytes: Uint8Array) => {
+const MAX32 = 0xffffffff
+const MAX16 = 0xffff
+
+const getUint64 = (view: DataView, offset: number) => {
+  const value = view.getBigUint64(offset, true)
+  if (value > BigInt(Number.MAX_SAFE_INTEGER)) {
+    invalid()
+  }
+  return Number(value)
+}
+
+/**
+ * 检查扩展字段格式，返回 ZIP64 扩展字段（id 1）的内容；没有时为 null。
+ * 大于 4GB 或条目超过 65535 个的归档（以及部分压缩工具）会用 ZIP64 记录真实大小与偏移。
+ */
+const checkExtra = (bytes: Uint8Array): DataView | null => {
   const view = viewOf(bytes)
   let offset = 0
+  let zip64: DataView | null = null
   while (offset < bytes.length) {
-    if (offset + 4 > bytes.length || view.getUint16(offset, true) === 1) {
+    if (offset + 4 > bytes.length) {
       invalid()
     }
-    offset += 4 + view.getUint16(offset + 2, true)
-    if (offset > bytes.length) {
+    const id = view.getUint16(offset, true)
+    const length = view.getUint16(offset + 2, true)
+    if (offset + 4 + length > bytes.length) {
       invalid()
     }
+    if (id === 1) {
+      if (zip64) {
+        invalid()
+      }
+      zip64 = new DataView(bytes.buffer, bytes.byteOffset + offset + 4, length)
+    }
+    offset += 4 + length
+  }
+  return zip64
+}
+
+/** 按 ZIP64 规则依次取出被标成 0xFFFFFFFF 的字段 */
+const zip64Reader = (extra: DataView | null) => {
+  let cursor = 0
+  return (value: number) => {
+    if (value !== MAX32) {
+      return value
+    }
+    if (!extra || cursor + 8 > extra.byteLength) {
+      return invalid()
+    }
+    const result = getUint64(extra, cursor)
+    cursor += 8
+    return result
   }
 }
 
@@ -103,45 +143,79 @@ const readDirectory = async (file: File): Promise<{ entries: Entry[]; offset: nu
   if (end < 0) {
     invalid()
   }
-  const count = tailView.getUint16(end + 10, true)
-  const size = tailView.getUint32(end + 12, true)
-  const offset = tailView.getUint32(end + 16, true)
+  let count = tailView.getUint16(end + 10, true)
+  let size = tailView.getUint32(end + 12, true)
+  let offset = tailView.getUint32(end + 16, true)
+  /** 中央目录之后紧跟的记录（普通结尾或 ZIP64 结尾）的位置 */
+  let directoryEnd = tailStart + end
   if (
     tailView.getUint16(end + 4, true) !== 0 ||
     tailView.getUint16(end + 6, true) !== 0 ||
-    tailView.getUint16(end + 8, true) !== count ||
-    count === 0xffff ||
-    size === 0xffffffff ||
-    offset === 0xffffffff ||
-    offset + size !== tailStart + end
+    tailView.getUint16(end + 8, true) !== count
   ) {
+    invalid()
+  }
+  if (count === MAX16 || size === MAX32 || offset === MAX32) {
+    // ZIP64：结尾前 20 字节是定位器，指向 ZIP64 结尾记录
+    const locatorStart = tailStart + end - 20
+    if (locatorStart < 0) {
+      invalid()
+    }
+    const locator = viewOf(await readBytes(file, locatorStart, 20))
+    if (locator.getUint32(0, true) !== 0x07064b50 || locator.getUint32(4, true) !== 0) {
+      invalid()
+    }
+    const recordStart = getUint64(locator, 8)
+    const record = viewOf(await readBytes(file, recordStart, 56))
+    if (
+      record.getUint32(0, true) !== 0x06064b50 ||
+      record.getUint32(16, true) !== 0 ||
+      record.getUint32(20, true) !== 0 ||
+      getUint64(record, 24) !== getUint64(record, 32)
+    ) {
+      invalid()
+    }
+    count = getUint64(record, 32)
+    size = getUint64(record, 40)
+    offset = getUint64(record, 48)
+    directoryEnd = recordStart
+  }
+  if (offset + size !== directoryEnd) {
     invalid()
   }
   const entries: Entry[] = []
   const paths = new Set<string>()
+  // 中央目录一次读进来再解析：上万个条目时逐条读文件会非常慢（尤其 iOS）
+  const directory = await readBytes(file, offset, size)
+  const slice = (start: number, length: number) => directory.subarray(start, start + length)
   let cursor = 0
   for (let index = 0; index < count; index++) {
     if (cursor + 46 > size) {
       invalid()
     }
-    const view = viewOf(await readBytes(file, offset + cursor, 46))
+    const view = viewOf(slice(cursor, 46))
     if (view.getUint32(0, true) !== 0x02014b50) {
       invalid()
     }
     const flags = view.getUint16(8, true)
     const method = view.getUint16(10, true)
-    const compressedSize = view.getUint32(20, true)
-    const entrySize = view.getUint32(24, true)
     const nameLength = view.getUint16(28, true)
     const extraLength = view.getUint16(30, true)
     const next = cursor + 46 + nameLength + extraLength + view.getUint16(32, true)
-    const entryOffset = view.getUint32(42, true)
+    if (next > size) {
+      invalid()
+    }
+    const zip64 = zip64Reader(
+      checkExtra(slice(cursor + 46 + nameLength, extraLength))
+    )
+    // ZIP64 扩展字段的顺序固定：原始大小、压缩后大小、本地头偏移
+    const entrySize = zip64(view.getUint32(24, true))
+    const compressedSize = zip64(view.getUint32(20, true))
+    const entryOffset = zip64(view.getUint32(42, true))
     // 只允许 deflate 选项、data descriptor 与 UTF-8 标志。
     if (
       flags & ~0x80e ||
       (method !== 0 && method !== 8) ||
-      compressedSize === 0xffffffff ||
-      entrySize === 0xffffffff ||
       (method === 0 && compressedSize !== entrySize) ||
       entryOffset >= offset ||
       view.getUint16(34, true) !== 0 ||
@@ -150,7 +224,7 @@ const readDirectory = async (file: File): Promise<{ entries: Entry[]; offset: nu
     ) {
       invalid()
     }
-    const name = await readBytes(file, offset + cursor + 46, nameLength)
+    const name = slice(cursor + 46, nameLength)
     const path = decodePath(name, flags)
     // 目录和同名文件也不能互相覆盖。
     const identity = path.endsWith('/') ? path.slice(0, -1) : path
@@ -158,7 +232,6 @@ const readDirectory = async (file: File): Promise<{ entries: Entry[]; offset: nu
       invalid()
     }
     paths.add(identity)
-    checkExtra(await readBytes(file, offset + cursor + 46 + nameLength, extraLength))
     entries.push({
       path,
       name,
@@ -195,32 +268,47 @@ const readEntryOffset = async (file: File, entry: Entry, boundary: number) => {
   ) {
     invalid()
   }
-  for (const [position, expected] of [
-    [14, entry.crc],
-    [18, entry.compressedSize],
-    [22, entry.size],
-  ]) {
-    const actual = view.getUint32(position, true)
-    if (actual !== expected && (!(entry.flags & 8) || actual !== 0)) {
-      invalid()
-    }
-  }
   const metadata = await readBytes(file, entry.offset + 30, nameLength + extraLength)
   if (entry.name.some((byte, index) => byte !== metadata[index])) {
     invalid()
   }
-  checkExtra(metadata.subarray(nameLength))
-  if (entry.flags & 8) {
+  const localExtra = checkExtra(metadata.subarray(nameLength))
+  const deferred = Boolean(entry.flags & 8)
+  const crc = view.getUint32(14, true)
+  if (crc !== entry.crc && !(deferred && crc === 0)) {
+    invalid()
+  }
+  // 本地头里的大小：可能是 ZIP64 标记、也可能因为 data descriptor 写成 0
+  const local = zip64Reader(localExtra)
+  const localSize = local(view.getUint32(22, true))
+  const localCompressed = local(view.getUint32(18, true))
+  for (const [actual, expected] of [
+    [localCompressed, entry.compressedSize],
+    [localSize, entry.size],
+  ]) {
+    if (actual !== expected && !(deferred && actual === 0)) {
+      invalid()
+    }
+  }
+  if (deferred) {
     if (end + 12 > boundary) {
       invalid()
     }
-    const descriptor = viewOf(await readBytes(file, end, Math.min(16, boundary - end)))
+    const descriptor = viewOf(await readBytes(file, end, Math.min(24, boundary - end)))
     const shift = descriptor.getUint32(0, true) === 0x08074b50 ? 4 : 0
+    const matches32 =
+      shift + 12 <= descriptor.byteLength &&
+      descriptor.getUint32(shift + 4, true) === entry.compressedSize &&
+      descriptor.getUint32(shift + 8, true) === entry.size
+    // ZIP64 的 data descriptor 用 8 字节记大小
+    const matches64 =
+      shift + 20 <= descriptor.byteLength &&
+      Number(descriptor.getBigUint64(shift + 4, true)) === entry.compressedSize &&
+      Number(descriptor.getBigUint64(shift + 12, true)) === entry.size
     if (
       shift + 12 > descriptor.byteLength ||
       descriptor.getUint32(shift, true) !== entry.crc ||
-      descriptor.getUint32(shift + 4, true) !== entry.compressedSize ||
-      descriptor.getUint32(shift + 8, true) !== entry.size
+      !(matches32 || matches64)
     ) {
       invalid()
     }
@@ -231,6 +319,8 @@ const readEntryOffset = async (file: File, entry: Entry, boundary: number) => {
 export type ArchiveEntry = {
   path: string
   size: number
+  /** 条目在文件中的结束位置，用于计算导入进度 */
+  end: number
   stream: AsyncIterable<Uint8Array>
 }
 
@@ -256,8 +346,8 @@ export async function* readArchive(file: File): AsyncGenerator<ArchiveEntry> {
         if (written > entry.size) {
           invalid()
         }
-        for (const byte of chunk) {
-          crc = (crc >>> 8) ^ crcTable[(crc ^ byte) & 0xff]
+        for (let index = 0; index < chunk.length; index++) {
+          crc = (crc >>> 8) ^ crcTable[(crc ^ chunk[index]) & 0xff]
         }
         if (chunk.length) {
           pending.push(chunk)
@@ -291,7 +381,7 @@ export async function* readArchive(file: File): AsyncGenerator<ArchiveEntry> {
       }
       completed = true
     }
-    yield { path: entry.path, size: entry.size, stream: stream() }
+    yield { path: entry.path, size: entry.size, end: start + entry.compressedSize, stream: stream() }
     if (!completed) {
       invalid()
     }

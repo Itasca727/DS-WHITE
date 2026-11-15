@@ -16,5 +16,6 @@ declare const styles: {
   readonly "roundHead": string;
   readonly "roundTail": string;
   readonly "compactDivider": string;
+  readonly "jumpFlash": string;
 };
 export = styles;

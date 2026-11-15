@@ -2,8 +2,12 @@ import clsx from 'clsx'
 import { Fragment, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useTranslate } from '../../i18n/index.js'
-import { searchHistory, type HistorySearchResult } from '../../services/chat/search.js'
-import { selectSession } from '../../services/chat/store.js'
+import {
+  clearSearchCache,
+  searchHistory,
+  type HistorySearchResult,
+} from '../../services/chat/search.js'
+import { openSessionAt } from '../../services/chat/store.js'
 import { formatDate } from '../../utils/format.js'
 import { haptic } from '../../utils/haptic.js'
 import { IconSearchOutline16 } from '../base/icons.js'
@@ -53,6 +57,9 @@ const Highlight = ({ text, query }: { text: string; query: string }) => {
  * 历史对话搜索页：常驻挂载（隐藏），点边栏「搜索」时从按钮的位置展开成整页，
  * 关闭时缩回按钮；选中结果后原地淡出并打开那段对话。
  */
+/** 每批显示的结果数 */
+const PAGE = 40
+
 export const HistorySearchPage = () => {
   const t = useTranslate()
   const open = useHistorySearch((state) => state.open)
@@ -64,6 +71,9 @@ export const HistorySearchPage = () => {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<HistorySearchResult[]>([])
   const [searching, setSearching] = useState(false)
+  const [truncated, setTruncated] = useState(false)
+  // 结果一次只渲染一批，滚到底或点「显示更多」再接着显示
+  const [shown, setShown] = useState(PAGE)
   // 每次搜索换一批 key，让结果按顺序依次浮现
   const [batch, setBatch] = useState(0)
 
@@ -89,10 +99,12 @@ export const HistorySearchPage = () => {
     let live = true
     setSearching(true)
     const timer = setTimeout(() => {
-      searchHistory(q, 50)
+      searchHistory(q, () => !live)
         .then((found) => {
-          if (live) {
-            setResults(found)
+          if (live && found) {
+            setResults(found.results)
+            setTruncated(found.truncated)
+            setShown(PAGE)
             setBatch((value) => value + 1)
           }
         })
@@ -116,6 +128,9 @@ export const HistorySearchPage = () => {
     const timer = setTimeout(() => {
       setQuery('')
       setResults([])
+      setTruncated(false)
+      setShown(PAGE)
+      clearSearchCache()
     }, 320)
     return () => clearTimeout(timer)
   }, [open])
@@ -328,16 +343,20 @@ export const HistorySearchPage = () => {
             <div className={styles.status}>{t('searchHistoryEmpty')}</div>
           ) : (
             <>
-              <div className={styles.count}>{t('historySearchCount', { count: results.length })}</div>
-              {results.map((result, index) => (
+              <div className={styles.count}>
+                {t(truncated ? 'historySearchCountMore' : 'historySearchCount', {
+                  count: results.length,
+                })}
+              </div>
+              {results.slice(0, shown).map((result, index) => (
                 <button
-                  key={`${batch}-${result.sessionId}`}
+                  key={`${batch}-${result.sessionId}-${result.messageId ?? 'title'}`}
                   type="button"
                   className={styles.result}
                   data-motion="rise"
-                  style={{ animationDelay: `${Math.min(index, 8) * 28}ms` }}
+                  style={{ animationDelay: `${Math.min(index % PAGE, 8) * 28}ms` }}
                   onClick={() => {
-                    selectSession(result.sessionId)
+                    openSessionAt(result.sessionId, result.messageId)
                     closeMobileSider()
                     closeHistorySearch('fade')
                   }}
@@ -358,6 +377,16 @@ export const HistorySearchPage = () => {
                   </span>
                 </button>
               ))}
+              {shown < results.length ? (
+                <button
+                  type="button"
+                  className={styles.more}
+                  data-ripple
+                  onClick={() => setShown((value) => value + PAGE)}
+                >
+                  {t('historySearchMore', { count: results.length - shown })}
+                </button>
+              ) : null}
             </>
           )}
         </div>

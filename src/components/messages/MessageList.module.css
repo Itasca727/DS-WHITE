@@ -254,3 +254,24 @@
   height: 1px;
   background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--white-accent) 45%, transparent), transparent);
 }
+
+/* 历史搜索跳过来的那条：冷光从底下浮起再褪去 */
+.jumpFlash {
+  animation: jumpFlash 2.2s var(--white-ease-out, ease-out);
+  border-radius: 14px;
+}
+
+@keyframes jumpFlash {
+  0% {
+    box-shadow: 0 0 0 0 transparent;
+    background-color: transparent;
+  }
+  18% {
+    box-shadow: 0 0 0 6px color-mix(in srgb, var(--white-accent, #5b6cff) 22%, transparent);
+    background-color: color-mix(in srgb, var(--white-accent, #5b6cff) 9%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 6px transparent;
+    background-color: transparent;
+  }
+}

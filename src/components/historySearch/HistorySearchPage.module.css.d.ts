@@ -22,5 +22,6 @@ declare const styles: {
   readonly "resultSnippet": string;
   readonly "mark": string;
   readonly "instant": string;
+  readonly "more": string;
 };
 export = styles;

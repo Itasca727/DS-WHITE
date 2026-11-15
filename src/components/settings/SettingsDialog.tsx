@@ -562,12 +562,18 @@ const ImportConfirm = ({
             {t('cancel')}
           </Button>
           <Button variant="dangerOutlined" size="m" onClick={() => void historyImport.confirm()}>
-            {t('historyImportConfirm')}
+            {t(historyImport.skipSnapshot ? 'historyImportSkipSnapshotConfirm' : 'historyImportConfirm')}
           </Button>
         </>
       }
     >
-      <div className={styles.importConfirmText}>{t('historyImportConfirmDescription')}</div>
+      <div className={styles.importConfirmText}>
+        {t(
+          historyImport.skipSnapshot
+            ? 'historyImportSkipSnapshotDescription'
+            : 'historyImportConfirmDescription'
+        )}
+      </div>
     </Modal>
   )
 }
@@ -906,6 +912,8 @@ const BalanceSetting = () => {
 /** 选文件后先提示覆盖；确认后才检查文件并执行导入，任何错误都提示导入失败。 */
 const useHistoryImport = () => {
   const [file, setFile] = useState<File | null>(null)
+  /** 第二步：导入前备份做不出来，问一句要不要直接覆盖 */
+  const [skipSnapshot, setSkipSnapshot] = useState(false)
   const [busy, setBusy] = useState(false)
   const [status, setStatus] = useState<Status>(null)
   const importing = useRef(false)
@@ -914,22 +922,52 @@ const useHistoryImport = () => {
     if (!file || importing.current) {
       return
     }
+    const current = file
     importing.current = true
     setFile(null)
     setBusy(true)
-    setStatus(null)
+    setStatus({ key: 'historyImporting', params: { percent: 0 } })
+    let lastPercent = 0
     try {
-      const count = await importHistory(file)
+      const count = await importHistory(current, {
+        skipSnapshot,
+        onProgress: (fraction) => {
+          const percent = Math.min(99, Math.floor(fraction * 100))
+          if (percent !== lastPercent) {
+            lastPercent = percent
+            setStatus({ key: 'historyImporting', params: { percent } })
+          }
+        },
+      })
+      setSkipSnapshot(false)
       setStatus({ key: count === 1 ? 'historyImportedOne' : 'historyImported', params: { count } })
-    } catch {
-      setStatus({ key: 'historyImportFailed', error: true })
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('history import failed', error)
+      if (error instanceof BackupError && error.key === 'backupSnapshotFailed' && !skipSnapshot) {
+        setStatus(null)
+        setSkipSnapshot(true)
+        setFile(current)
+      } else {
+        setSkipSnapshot(false)
+        setStatus(
+          error instanceof BackupError && error.key !== 'backupIncomplete'
+            ? { key: 'historyImportFailedReason', reason: error.key, error: true }
+            : { key: 'historyImportFailed', error: true }
+        )
+      }
     } finally {
       importing.current = false
       setBusy(false)
     }
   }
 
-  return { file, busy, status, select: setFile, cancel: () => setFile(null), confirm }
+  const cancel = () => {
+    setFile(null)
+    setSkipSnapshot(false)
+  }
+
+  return { file, skipSnapshot, busy, status, select: setFile, cancel, confirm }
 }
 
 /** 导入 = 覆盖：用选中文件替换本地全部会话与附件。 */

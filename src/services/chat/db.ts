@@ -188,6 +188,13 @@ export const loadFile = async (id: string): Promise<Blob | undefined> =>
   (await (await getDB()).get('files', id))?.blob
 
 /** 清空导入暂存：开始导入前清除上次中断（如关闭页面）遗留的数据，导入失败后清除本次写入。 */
+/**
+ * 导入的图片直接写进正式的 files 仓库（同一个文件 ID 就是同一张图），不再先放暂存再整体搬一遍：
+ * 大归档导入时少占一倍空间，提交也不用在一个事务里复制全部图片。
+ * 这里记下本次新写入的 ID，导入失败时把其中旧会话没用到的删掉。
+ */
+const stagedFileIds = new Set<string>()
+
 export const clearStaging = async (): Promise<void> => {
   const tx = (await getDB()).transaction(['sessionsStaging', 'filesStaging'], 'readwrite')
   await Promise.all([
@@ -195,14 +202,29 @@ export const clearStaging = async (): Promise<void> => {
     tx.objectStore('filesStaging').clear(),
     tx.done,
   ])
+  if (stagedFileIds.size > 0) {
+    const ids = [...stagedFileIds]
+    stagedFileIds.clear()
+    await deleteUnreferencedFiles(ids)
+  }
 }
 
 export const addStagingSession = async (session: Session): Promise<void> => {
   await (await getDB()).add('sessionsStaging', session)
 }
 
-export const saveStagingFiles = (files: StoredFile[]): Promise<void> =>
-  putFiles('filesStaging', files)
+export const saveStagingFiles = async (files: StoredFile[]): Promise<void> => {
+  const tx = (await getDB()).transaction('files', 'readwrite')
+  await Promise.all([
+    ...files.map(async (file) => {
+      if ((await tx.store.getKey(file.id)) === undefined) {
+        stagedFileIds.add(file.id)
+      }
+      await tx.store.put(file)
+    }),
+    tx.done,
+  ])
+}
 
 /** 图片位于会话 JSON 之后；全部读完后回填具体 MIME，保留归档给出的 isImage 标识。 */
 export const updateStagingFileTypes = async (types: ReadonlyMap<string, string>): Promise<void> => {
@@ -243,33 +265,51 @@ export const commitStaging = async (): Promise<SessionSummary[]> => {
     ['sessions', 'sessionSummaries', 'files', 'sessionsStaging', 'filesStaging'],
     'readwrite'
   )
-  const move = async (from: 'sessionsStaging' | 'filesStaging', to: 'sessions' | 'files') => {
+  const run = async () => {
     try {
-      const target = tx.objectStore(to)
-      await target.clear()
-      if (to === 'sessions') {
-        await tx.objectStore('sessionSummaries').clear()
-      }
+      const sessions = tx.objectStore('sessions')
+      const summaryStore = tx.objectStore('sessionSummaries')
+      await sessions.clear()
+      await summaryStore.clear()
+      const referenced = new Set<string>()
       for (
-        let cursor = await tx.objectStore(from).openCursor();
+        let cursor = await tx.objectStore('sessionsStaging').openCursor();
         cursor;
         cursor = await cursor.continue()
       ) {
-        await target.put(cursor.value)
-        if (to === 'sessions') {
-          const summary = storedSummary(cursor.value as Session)
-          await tx.objectStore('sessionSummaries').put(summary)
-          summaries.push(toSessionSummary(summary))
+        await sessions.put(cursor.value)
+        const summary = storedSummary(cursor.value)
+        await summaryStore.put(summary)
+        summaries.push(toSessionSummary(summary))
+        for (const id of summary.fileIds) {
+          referenced.add(id)
         }
       }
-      await tx.objectStore(from).clear()
+      await tx.objectStore('sessionsStaging').clear()
+      // 旧版本留下的暂存图片也一并搬过来
+      for (
+        let cursor = await tx.objectStore('filesStaging').openCursor();
+        cursor;
+        cursor = await cursor.continue()
+      ) {
+        await tx.objectStore('files').put(cursor.value)
+      }
+      await tx.objectStore('filesStaging').clear()
+      // 新历史用不到的旧图片在同一个事务里删掉：要么整体替换成功，要么什么都不变
+      const files = tx.objectStore('files')
+      for (let cursor = await files.openKeyCursor(); cursor; cursor = await cursor.continue()) {
+        if (!referenced.has(cursor.key)) {
+          await files.delete(cursor.key)
+        }
+      }
     } catch (error) {
       // 同步抛出的错误不会让事务自动回滚，需显式中止，避免只提交清空和部分移入。
       abortTransaction(tx)
       throw error
     }
   }
-  await Promise.all([move('sessionsStaging', 'sessions'), move('filesStaging', 'files'), tx.done])
+  await Promise.all([run(), tx.done])
+  stagedFileIds.clear()
   // 直接返回本次提交的列表，调用方无需在替换成功后再发起可能失败的读取。
   return summaries
 }

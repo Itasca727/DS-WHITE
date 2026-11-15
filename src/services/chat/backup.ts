@@ -47,14 +47,42 @@ export const exportHistory = (): Promise<{ name: string; blob: Blob }> =>
  * 确认覆盖后调用：先检查 ZIP 格式与版本，校验失败时保留正在生成的回答；
  * 通过后从 ZIP 流式写入暂存，成功才替换原有会话与图片原件。返回导入的会话数。
  */
-export const importHistory = (file: File): Promise<number> =>
+export type ImportOptions = {
+  /** 用户确认过：导入前快照做不出来（太大 / 空间不足）也直接覆盖 */
+  skipSnapshot?: boolean
+  onProgress?: (fraction: number) => void
+}
+
+const isQuotaError = (error: unknown) =>
+  error instanceof DOMException &&
+  (error.name === 'QuotaExceededError' || error.name === 'UnknownError' || error.code === 22)
+
+/** 存储写入失败统一换成「空间不足」提示，其他错误原样抛出 */
+const explainStorage = (error: unknown): never => {
+  if (isQuotaError(error) || (error instanceof Error && isQuotaError(error.cause))) {
+    throw new BackupError('backupQuota')
+  }
+  throw error
+}
+
+export const importHistory = (file: File, options: ImportOptions = {}): Promise<number> =>
   enqueueBackup(async () => {
     const { checkArchiveFormat, importArchive } = await import('./history/importArchive.js')
     await checkArchiveFormat(file)
+    // 浏览器空间紧张时可能清掉网站数据；大文件导入前申请持久存储
+    void navigator.storage?.persist?.().catch(() => false)
     // 覆盖前先留一份完整快照；保存失败就不导入，避免不可逆丢失。
-    const snapshot = await createHistoryExport()
-    await db.saveBackup({ id: 'pre-import', ...snapshot, createdAt: Date.now() })
-    return replaceHistory(() => importArchive(file))
+    // 当前没有任何对话时没有可丢的东西，跳过快照（也省下一份空间）。
+    if (!options.skipSnapshot && useChatStore.getState().sessions.length > 0) {
+      try {
+        const snapshot = await createHistoryExport()
+        await db.saveBackup({ id: 'pre-import', ...snapshot, createdAt: Date.now() })
+      } catch (error) {
+        db.reportStorageError('pre-import snapshot')(error)
+        throw new BackupError('backupSnapshotFailed')
+      }
+    }
+    return replaceHistory(() => importArchive(file, options.onProgress)).catch(explainStorage)
   })
 
 /** 是否存在可恢复的导入前快照。 */
