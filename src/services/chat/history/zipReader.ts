@@ -328,14 +328,61 @@ export type ArchiveEntry = {
  * 按条目在文件中的物理顺序逐条、逐块解压，跳过目录条目。
  * 调用方必须消费完当前条目的数据，再请求下一个条目。
  */
+/** 压缩工具顺手塞进去的系统文件：macOS 的 __MACOSX/ 与 .DS_Store、Windows 的缩略图缓存 */
+const isJunk = (path: string) => {
+  const name = path.split('/').at(-1) ?? ''
+  return (
+    path.startsWith('__MACOSX/') ||
+    path.includes('/__MACOSX/') ||
+    name === '.DS_Store' ||
+    name === 'Thumbs.db' ||
+    name === 'desktop.ini' ||
+    name.startsWith('._')
+  )
+}
+
+/** 导出格式里条目的先后：manifest → user → 会话 JSON → index → 图片 */
+const rankOf = (path: string) =>
+  path === 'manifest.json'
+    ? 0
+    : path === 'user.json'
+      ? 1
+      : /^chat_sessions\/[^/]+\.json$/.test(path)
+        ? 2
+        : path === 'chat_session_index.json'
+          ? 3
+          : 4
+
+/**
+ * 解压后又重新压缩的归档（手机「文件」里压缩、Windows 发送到压缩文件夹、Mac 右键压缩）常见三种变化：
+ * 外面多套一层文件夹、条目顺序被打乱、混进系统文件。读之前统一整理回导出时的样子：
+ * 去掉公共的外层文件夹，跳过系统文件，按导出格式的顺序读（ZIP 本来就能按偏移随意读取）。
+ */
+const normalizeEntries = (entries: Entry[]) => {
+  const files = entries.filter((entry) => !entry.path.endsWith('/') && !isJunk(entry.path))
+  let prefix = ''
+  if (!files.some((entry) => entry.path === 'manifest.json')) {
+    const manifest = files.find((entry) => entry.path.endsWith('/manifest.json'))
+    const candidate = manifest ? manifest.path.slice(0, -'manifest.json'.length) : ''
+    if (candidate && files.every((entry) => entry.path.startsWith(candidate))) {
+      prefix = candidate
+    }
+  }
+  return files
+    .map((entry) => ({ entry, path: entry.path.slice(prefix.length) }))
+    .sort((a, b) => rankOf(a.path) - rankOf(b.path) || a.entry.offset - b.entry.offset)
+}
+
 export async function* readArchive(file: File): AsyncGenerator<ArchiveEntry> {
   const directory = await readDirectory(file)
-  for (const [index, entry] of directory.entries.entries()) {
-    const boundary = directory.entries[index + 1]?.offset ?? directory.offset
+  // 每个条目的数据边界按文件里的实际位置算，和读取顺序无关
+  const byOffset = directory.entries.toSorted((a, b) => a.offset - b.offset)
+  const boundaries = new Map(
+    byOffset.map((entry, index) => [entry, byOffset[index + 1]?.offset ?? directory.offset])
+  )
+  for (const { entry, path } of normalizeEntries(directory.entries)) {
+    const boundary = boundaries.get(entry) ?? directory.offset
     const start = await readEntryOffset(file, entry, boundary)
-    if (entry.path.endsWith('/')) {
-      continue
-    }
     let completed = false
     const stream = async function* (): AsyncGenerator<Uint8Array> {
       let written = 0
@@ -381,7 +428,7 @@ export async function* readArchive(file: File): AsyncGenerator<ArchiveEntry> {
       }
       completed = true
     }
-    yield { path: entry.path, size: entry.size, end: start + entry.compressedSize, stream: stream() }
+    yield { path, size: entry.size, end: start + entry.compressedSize, stream: stream() }
     if (!completed) {
       invalid()
     }
