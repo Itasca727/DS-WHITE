@@ -18,6 +18,7 @@ import { ensureApiKey } from '../components/settings/settingsDialogState.js'
 import { SettingsDialog } from '../components/settings/SettingsDialog.js'
 import { HistorySearchPage } from '../components/historySearch/HistorySearchPage.js'
 import { BackupPrompt } from '../components/base/BackupPrompt.js'
+import { IntroNotice } from '../components/base/IntroNotice.js'
 import { Toast } from '../components/base/Toast.js'
 import { showToast } from '../components/base/toastState.js'
 import { onUploadNotice } from '../services/attachments.js'
@@ -139,6 +140,7 @@ export const App = () => {
       <Toast />
       <BackupPrompt />
       <HistorySearchPage />
+      <IntroNotice />
     </>
   )
 }

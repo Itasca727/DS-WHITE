@@ -44,6 +44,14 @@ export const en = {
   compactionDivider: 'The {count} rounds above are kept as memory',
   contextCompactionStatus: 'Auto-compact: first {count} rounds summarized',
   contextCompactedTag: 'Summarized',
+  introTitle: 'Before you start',
+  introMotto: 'As long as the zip lives, so do they',
+  introLocal:
+    'This is a 【local】 web tool. Make a habit of 【exporting your chat history (zip file)】 anytime, anywhere, so a browser cache cleanup cannot wipe it.',
+  introUpdate:
+    'How to update: first 【export your chat history】, then remove the home-screen / desktop shortcut (this also clears local chats), reopen the demo site and refresh to get the latest version. After adding it back, import the zip in Settings to restore every chat.',
+  introFree: 'This web app is completely free to use; API fees are charged by the LLM (large language model) provider.',
+  introConfirm: 'Got it',
   settingsAutoCompact: 'Auto-compact context',
   settingsAutoCompactDescription:
     'When a chat nears the 1M-token limit, the earliest part is summarized by the model first so requests stay within the window. Originals are kept; summarizing costs one extra call.',

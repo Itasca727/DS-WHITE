@@ -40,6 +40,14 @@ export const zh = {
   compactionDivider: '以上 {count} 轮，已收进记忆',
   contextCompactionStatus: '自动压缩：前 {count} 轮已整理成摘要',
   contextCompactedTag: '已整理',
+  introTitle: '使用说明',
+  introMotto: 'zip 在，人就在',
+  introLocal:
+    '该工具为【本地】网页工具，请务必随时、随地做好【历史对话导出（zip 文件）】，防止被后台清缓存。',
+  introUpdate:
+    '更新方式：先做好【历史对话导出】，再删除主屏幕 / 桌面上的快捷方式（删除会一并清掉本地对话），然后重新打开 demo 网站并刷新，即可更新到最新版本；重新添加到主屏幕后，在设置里导入 zip 就能找回全部对话。',
+  introFree: '该网页端口使用完全免费，API 费用由 LLM（大语言模型）厂商收取。',
+  introConfirm: '我已知晓',
   settingsAutoCompact: '自动压缩上下文',
   settingsAutoCompactDescription:
     '对话快到 1M token 上限时，先让模型把最早的对话整理成摘要再继续，保证不超出窗口。原文仍留在记录里，整理时会额外调用一次模型。',
