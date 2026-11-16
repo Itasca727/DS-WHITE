@@ -3,6 +3,7 @@ declare const styles: {
   readonly "title": string;
   readonly "titleIcon": string;
   readonly "stoppedIcon": string;
+  readonly "sparkIcon": string;
   readonly "titleText": string;
   readonly "shimmer": string;
   readonly "withLine": string;

@@ -9,7 +9,6 @@ import { stopReadAloud } from '../../services/speech/readAloud.js'
 import type { AssistantMessage as AssistantMessageType } from '../../services/chat/types.js'
 import { openSettings } from '../settings/settingsDialogState.js'
 import { IconButton } from '../base/IconButton.js'
-import { WhiteOrb } from '../base/WhiteOrb.js'
 import { startThinkingSound } from '../../utils/sound.js'
 import { Button } from '../base/Button.js'
 import { Markdown } from '../markdown/Markdown.js'
@@ -85,7 +84,11 @@ export const AssistantMessage = memo(function AssistantMessage({
       ) : null}
       {waiting ? (
         <div className={styles.waiting} role="status" aria-label={t('messageThinking')}>
-          <WhiteOrb size={18} breathing />
+          <span className={styles.waitingDots} aria-hidden="true">
+            <i />
+            <i />
+            <i />
+          </span>
           <span className={styles.waitingText}>{t(compacting ? 'whiteCompacting' : 'whiteWaiting')}</span>
         </div>
       ) : null}

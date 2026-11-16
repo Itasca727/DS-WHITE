@@ -113,3 +113,8 @@ button.image {
     transform: rotate(360deg);
   }
 }
+
+.zoomable {
+  cursor: zoom-in;
+  -webkit-tap-highlight-color: transparent;
+}

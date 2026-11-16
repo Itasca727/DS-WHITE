@@ -54,8 +54,6 @@ export const ContextPanel = ({ session, onClose }: { session: Session; onClose: 
   )
 
   const allIds = rounds.map(([user]) => user.id)
-  const recentIds = rounds.slice(-5).map(([user]) => user.id)
-  const olderIds = rounds.slice(0, -5).map(([user]) => user.id)
 
   const applyCompress = (value: number) => {
     const next = Math.max(0, Math.min(rounds.length, Math.floor(value) || 0))
@@ -71,11 +69,13 @@ export const ContextPanel = ({ session, onClose }: { session: Session; onClose: 
     }
   }
 
-  const setLastFive = () => {
+  /** 只带最近 count 轮：更早的全部取消勾选 */
+  const keepRecent = (count: number) => {
+    const olderIds = allIds.slice(0, -count)
     if (olderIds.length) {
       setContextExcludedMany(session.id, olderIds, true)
     }
-    setContextExcludedMany(session.id, recentIds, false)
+    setContextExcludedMany(session.id, allIds.slice(-count), false)
   }
 
   return (
@@ -164,8 +164,11 @@ export const ContextPanel = ({ session, onClose }: { session: Session; onClose: 
           <button type="button" onClick={() => setContextExcludedMany(session.id, allIds, true)}>
             {t('contextAllOff')}
           </button>
-          <button type="button" onClick={setLastFive}>
+          <button type="button" onClick={() => keepRecent(5)}>
             {t('contextLast5')}
+          </button>
+          <button type="button" onClick={() => keepRecent(10)}>
+            {t('contextLast10')}
           </button>
         </div>
 

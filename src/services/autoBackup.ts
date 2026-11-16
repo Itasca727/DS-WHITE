@@ -9,19 +9,23 @@ import { useSettings } from './settings.js'
  * 自动备份（设置里开启，默认关闭）：每完成 10 轮对话，把全部历史导出一份 ZIP。
  * - App 内始终覆盖保存最新一份（IndexedDB）；
  * - 电脑上的 Chrome / Edge：在设置里选一次文件位置，之后静默覆盖写入那个文件；
- * - iPhone 等不支持写本地文件的环境：弹出轻提示，点一下用系统分享存到「文件」。
+ * - iPhone 等不支持写本地文件的环境：只能弹提醒，用户点一下才用系统分享存到「文件」，
+ *   所以那里叫「备份提醒」，不点就没有真正保存。
  */
 export const BACKUP_FILE_NAME = 'WHITE-全部对话备份.zip'
 const BACKUP_ID = 'auto'
 const COUNT_KEY = 'chat-demo:auto-backup-count'
 const HANDLE_KEY = 'backup-handle'
+const SAVED_KEY = 'chat-demo:auto-backup-saved'
 const DEFAULT_EVERY = 10
 
 type PromptKind = 'save' | 'permission' | null
 
 type AutoBackupState = {
-  /** 最近一次自动备份的时间 */
+  /** 最近一次生成备份的时间 */
   latestAt: number | null
+  /** 最近一次真正存到文件（覆盖写入 / 分享 / 下载）的那份备份的生成时间 */
+  savedAt: number | null
   /** 已选的覆盖目标文件名（仅支持文件句柄的浏览器） */
   targetName: string | null
   prompt: PromptKind
@@ -31,6 +35,7 @@ type AutoBackupState = {
 
 export const useAutoBackup = create<AutoBackupState>(() => ({
   latestAt: null,
+  savedAt: null,
   targetName: null,
   prompt: null,
   running: false,
@@ -123,6 +128,20 @@ const onRound = () => {
   }
 }
 
+/** 记下「这份备份已经存到文件」，设置页据此提示还有没有没保存的备份 */
+const markSaved = () => {
+  const savedAt = useAutoBackup.getState().latestAt
+  if (!savedAt) {
+    return
+  }
+  useAutoBackup.setState({ savedAt })
+  try {
+    localStorage.setItem(SAVED_KEY, String(savedAt))
+  } catch {
+    // 存储不可用时只在内存中记录
+  }
+}
+
 // ---------- 备份 ----------
 
 /** 生成备份并覆盖 App 内的上一版；有可写的目标文件就直接覆盖写入，否则提示存到文件。 */
@@ -143,6 +162,7 @@ export const runAutoBackup = async (): Promise<void> => {
       const permission = (await handle.queryPermission?.({ mode: 'readwrite' })) ?? 'granted'
       if (permission === 'granted') {
         await writeTo(handle, blob)
+        markSaved()
         useAutoBackup.setState({ prompt: null })
         notify({ key: 'backupWritten', params: { name: handle.name } })
         return
@@ -179,6 +199,7 @@ export const saveLatestBackup = async (): Promise<void> => {
       const permission = (await handle.requestPermission?.({ mode: 'readwrite' })) ?? 'granted'
       if (permission === 'granted') {
         await writeTo(handle, file)
+        markSaved()
         useAutoBackup.setState({ prompt: null })
         notify({ key: 'backupWritten', params: { name: handle.name } })
       }
@@ -194,6 +215,7 @@ export const saveLatestBackup = async (): Promise<void> => {
       link.click()
       setTimeout(() => URL.revokeObjectURL(url), 10_000)
     }
+    markSaved()
     useAutoBackup.setState({ prompt: null })
   } catch (error) {
     // 用户在分享面板点了取消：保留提示，什么都不做
@@ -225,6 +247,7 @@ export const pickBackupTarget = async (): Promise<void> => {
     useAutoBackup.setState({ targetName: handle.name, prompt: null })
     if (latestFile) {
       await writeTo(handle, latestFile)
+      markSaved()
     }
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') {
@@ -243,7 +266,10 @@ export const setupAutoBackup = (options: { notify: (notice: Notice) => void }) =
       const backup = await db.loadBackup(BACKUP_ID)
       if (backup) {
         latestFile = new File([backup.blob], BACKUP_FILE_NAME, { type: 'application/zip' })
-        useAutoBackup.setState({ latestAt: backup.createdAt })
+        useAutoBackup.setState({
+          latestAt: backup.createdAt,
+          savedAt: Number(localStorage.getItem(SAVED_KEY)) || null,
+        })
       }
       const handle = await loadHandle()
       if (handle) {

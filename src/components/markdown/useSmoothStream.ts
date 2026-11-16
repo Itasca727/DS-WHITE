@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 
-/** 积压的字在这么多帧内吐完：积压越多吐得越快，网络一顿也不会一下蹦出一大段 */
-const DRAIN_FRAMES = 14
-/** 每帧至少吐出的字数（约 60 字/秒） */
-const MIN_STEP = 1
+/** 每隔这么久吐一小段。逐帧一个字地吐会让整条回答每秒重排 60 次，手机上明显卡 */
+const TICK_MS = 55
+/** 积压的字在这么多次内吐完：积压越多吐得越快，网络一顿也不会一下蹦出一大段 */
+const DRAIN_TICKS = 5
+/** 每次至少吐出的字数（约 70 字/秒） */
+const MIN_STEP = 4
 
 /** 不在代理对中间截断，避免 emoji 等字符短暂显示成乱码 */
 const safeEnd = (text: string, end: number) => {
@@ -12,7 +14,7 @@ const safeEnd = (text: string, end: number) => {
 }
 
 /**
- * 流式输出时把一块块到达的文字匀速吐出来。
+ * 流式输出时把一块块到达的文字按小段匀速吐出来。
  * 输出结束（active 为 false）立即显示全部内容，不拖尾。
  */
 export const useSmoothStream = (content: string, active: boolean) => {
@@ -31,20 +33,19 @@ export const useSmoothStream = (content: string, active: boolean) => {
     if (!active) {
       return
     }
-    let frame = 0
     const tick = () => {
       const target = targetRef.current
-      const next0 = Math.min(shownRef.current, target.length)
-      const backlog = target.length - next0
+      const from = Math.min(shownRef.current, target.length)
+      const backlog = target.length - from
       if (backlog > 0) {
-        const next = safeEnd(target, Math.min(target.length, next0 + Math.max(MIN_STEP, Math.ceil(backlog / DRAIN_FRAMES))))
+        const step = Math.max(MIN_STEP, Math.ceil(backlog / DRAIN_TICKS))
+        const next = safeEnd(target, Math.min(target.length, from + step))
         shownRef.current = next
         setShown(next)
       }
-      frame = requestAnimationFrame(tick)
     }
-    frame = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(frame)
+    const timer = setInterval(tick, TICK_MS)
+    return () => clearInterval(timer)
   }, [active])
 
   if (!active) {

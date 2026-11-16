@@ -101,7 +101,13 @@ export const ReplyArea = memo(function ReplyArea({
             setOpen((value) => !value)
           }}
         >
-          <span className={clsx(styles.titleIcon, stopped && styles.stoppedIcon)}>
+          <span
+            className={clsx(
+              styles.titleIcon,
+              stopped && styles.stoppedIcon,
+              titleActive && styles.sparkIcon
+            )}
+          >
             <IconThinkOutline16 />
           </span>
           <span className={clsx(styles.titleText, titleActive && styles.shimmer)}>{title}</span>

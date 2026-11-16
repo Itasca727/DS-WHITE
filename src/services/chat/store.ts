@@ -1252,6 +1252,9 @@ export const onReplyDone = (listener: () => void) => {
   return () => replyDoneListeners.delete(listener)
 }
 
+/** 流式内容写入 store 的最短间隔；画面上的匀速吐字由 Markdown 组件负责 */
+const STREAM_FLUSH_MS = 90
+
 const streamReply = async (sessionId: string, initial: AssistantMessage, request: Request) => {
   const controller = new AbortController()
   if (!getSession(sessionId)?.title) {
@@ -1259,10 +1262,11 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
   }
   set((state) => ({ streaming: { ...state.streaming, [sessionId]: controller } }))
   let reply = initial
-  let frame = 0
+  /** 流式增量每隔一小段时间才写进 store：逐帧写会让整个对话列表每秒重算几十次，长对话里明显卡 */
+  let flushTimer: ReturnType<typeof setTimeout> | undefined
   const flush = () => {
-    cancelAnimationFrame(frame)
-    frame = 0
+    clearTimeout(flushTimer)
+    flushTimer = undefined
     updateReply(sessionId, reply)
   }
   streamFlushes.set(sessionId, flush)
@@ -1362,7 +1366,7 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
           if (document.visibilityState === 'hidden') {
             flush()
           } else {
-            frame ||= requestAnimationFrame(flush)
+            flushTimer ??= setTimeout(flush, STREAM_FLUSH_MS)
           }
         }
         reply = settleReply(reply, 'done', Date.now())
@@ -1426,7 +1430,7 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
   } finally {
     titleRequests.delete(controller)
     streamFlushes.delete(sessionId)
-    cancelAnimationFrame(frame)
+    clearTimeout(flushTimer)
     updateReply(sessionId, reply)
     set((state) => ({
       streaming: Object.fromEntries(

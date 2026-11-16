@@ -417,22 +417,28 @@ const AutoBackupSetting = () => {
   const latestAt = useAutoBackup((state) => state.latestAt)
   const targetName = useAutoBackup((state) => state.targetName)
   const fileTarget = supportsFileTarget()
+  const savedAt = useAutoBackup((state) => state.savedAt)
   const latest = latestAt
-    ? t('settingsBackupLatest', { time: formatBackupTime(latestAt) })
+    ? t('settingsBackupLatest', { time: formatBackupTime(latestAt) }) +
+      (savedAt === latestAt ? '' : t('settingsBackupUnsaved'))
     : t('settingsBackupNone')
+  // 不能直接写文件的环境（iPhone 等）只是提醒，名字和说明都如实写
+  const title = t(fileTarget ? 'settingsAutoBackup' : 'settingsBackupReminder')
   return (
     <>
       <SettingCell
-        label={t('settingsAutoBackup')}
-        description={t('settingsAutoBackupDescription')}
+        label={title}
+        description={t(
+          fileTarget ? 'settingsAutoBackupDescription' : 'settingsBackupReminderDescription'
+        )}
         status={null}
         action={
-          <OnOffSelect label={t('settingsAutoBackup')} value={autoBackup} onChange={setAutoBackup} />
+          <OnOffSelect label={title} value={autoBackup} onChange={setAutoBackup} />
         }
       />
       {autoBackup ? (
         <SettingCell
-          label={t('settingsBackupTarget')}
+          label={t(fileTarget ? 'settingsBackupTarget' : 'settingsBackupManual')}
           description={`${
             fileTarget
               ? targetName

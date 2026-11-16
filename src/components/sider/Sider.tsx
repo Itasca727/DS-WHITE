@@ -55,7 +55,7 @@ export const Sider = ({ mobile = false }: { mobile?: boolean }) => {
     <div className={clsx(styles.sider, mobile && styles.mobile)}>
       <div className={styles.top}>
         <h1 className={styles.appName}>
-          <Signature width={91} motion="breath" variant="solid" alt={t('appName')} />
+          <Signature width={96} motion="still" variant="solid" alt={t('appName')} />
         </h1>
         <IconButton
           size="m"
