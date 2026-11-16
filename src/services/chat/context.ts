@@ -264,7 +264,6 @@ export type BuiltRequest = {
 /**
  * 组装一次请求。默认纯官方：原样全量历史，不注入任何东西。
  * - 显式 contextCompress：把最早 N 轮压成摘要放进 system，其余原样发送；
- * - contextAutoCompress：历史估算超过 contextBudget 时自动压缩最早轮次；
  * - 手动排除始终生效。
  */
 export const buildRequestMessages = (
@@ -276,28 +275,10 @@ export const buildRequestMessages = (
   session?: Session
 ): BuiltRequest => {
   const excluded = new Set(session?.contextExcluded ?? [])
-  let compress = Math.max(0, session?.contextCompress ?? 0)
+  const compress = Math.max(0, session?.contextCompress ?? 0)
   const rounds = getContextRounds(history).filter(([user]) => !excluded.has(user.id))
 
-  // 自动压缩：未显式设置轮数时，超预算就把最早若干轮压成摘要。
-  if (compress === 0 && session?.contextAutoCompress === true) {
-    const budget = Math.max(1, session?.contextBudget ?? 64000)
-    const total = estimateHistoryTokens(history)
-    if (total > budget) {
-      let dropped = 0
-      let droppedTokens = 0
-      for (const [user, reply] of rounds) {
-        if (total - droppedTokens + SUMMARY_TOKENS <= budget) {
-          break
-        }
-        droppedTokens += estimateTokens(user.content) + estimateTokens(getReplyText(reply)) + 8
-        dropped += 1
-      }
-      if (dropped > 0) {
-        compress = dropped
-      }
-    }
-  }
+  // 旧版的「按预算自动压缩」已并入全局的自动压缩（设置里同一个开关），这里不再处理。
 
   if (!compress) {
     return {

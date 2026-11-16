@@ -450,3 +450,9 @@ body[data-font-size='xlarge'] {
     animation-duration: 100ms !important;
   }
 }
+
+/* 手机上往下拖着关掉的面板已经自己滑出去了，退场影子不再播放动画 */
+[data-exiting][data-dismissed],
+[data-exiting][data-dismissed] * {
+  animation: none !important;
+}

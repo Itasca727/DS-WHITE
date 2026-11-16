@@ -66,3 +66,21 @@
   gap: 8px;
   margin-top: 20px;
 }
+
+/* 底部面板顶上的拖动条：提示可以往下拖着关掉，只在手机上出现 */
+.grabber {
+  display: none;
+}
+
+@media not all and (min-width: 768px) {
+  .grabber {
+    display: block;
+    flex-shrink: 0;
+    width: 36px;
+    height: 4px;
+    margin: -10px auto 8px;
+    border-radius: 2px;
+    background-color: var(--dsw-alias-label-tertiary, rgba(127, 127, 140, 0.4));
+    opacity: 0.5;
+  }
+}

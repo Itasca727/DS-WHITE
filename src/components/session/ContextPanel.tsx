@@ -6,14 +6,15 @@ import { getVisibleMessages } from '../../services/chat/branches.js'
 import { estimateTokens } from '../../services/chat/context.js'
 import { getContextRounds, getReplyText } from '../../services/chat/reply.js'
 import {
-  setContextAutoCompress,
   setContextCompress,
   setContextExcluded,
   setContextExcludedMany,
 } from '../../services/chat/store.js'
 import type { Session } from '../../services/chat/types.js'
 import { validCompaction } from '../../services/chat/compaction.js'
-import { useSettings } from '../../services/settings.js'
+import { setAutoCompact, useSettings } from '../../services/settings.js'
+import { Button } from '../base/Button.js'
+import { Modal } from '../base/Modal.js'
 import styles from './ContextPanel.module.css'
 
 const preview = (text: string, fallback: string) => {
@@ -43,9 +44,9 @@ export const ContextPanel = ({ session, onClose }: { session: Session; onClose: 
     [session]
   )
   const compactedIds = useMemo(() => new Set(compaction?.msgIds ?? []), [compaction])
-  const autoCompress = session.contextAutoCompress === true
   const [compressInput, setCompressInput] = useState(compress ? String(compress) : '')
-  const [autoBudget, setAutoBudget] = useState(String(session.contextBudget ?? 64000))
+  /** 打开自动压缩前先确认：它是全局设置，对所有对话生效 */
+  const [confirmingAuto, setConfirmingAuto] = useState(false)
   const tokens = rounds.reduce(
     (sum, [user, reply]) =>
       sum + estimateTokens(user.content) + estimateTokens(getReplyText(reply)),
@@ -62,8 +63,12 @@ export const ContextPanel = ({ session, onClose }: { session: Session; onClose: 
     setCompressInput(next ? String(next) : '')
   }
 
-  const applyAuto = (enabled: boolean, budget: number) => {
-    setContextAutoCompress(session.id, enabled, budget)
+  const toggleAuto = (enabled: boolean) => {
+    if (enabled) {
+      setConfirmingAuto(true)
+    } else {
+      setAutoCompact(false)
+    }
   }
 
   const setLastFive = () => {
@@ -144,25 +149,11 @@ export const ContextPanel = ({ session, onClose }: { session: Session; onClose: 
           <label className={styles.autoRow}>
             <input
               type="checkbox"
-              checked={autoCompress}
-              onChange={(event) => applyAuto(event.target.checked, Number(autoBudget))}
+              checked={autoCompact}
+              onChange={(event) => toggleAuto(event.target.checked)}
             />
             {t('contextAutoCompress')}
           </label>
-          <div className={styles.compressRow}>
-            <input
-              className={styles.compressInput}
-              type="number"
-              inputMode="numeric"
-              min={1000}
-              step={1000}
-              value={autoBudget}
-              onChange={(event) => setAutoBudget(event.target.value)}
-            />
-            <button type="button" onClick={() => applyAuto(true, Number(autoBudget))}>
-              {t('contextCompressApply')}
-            </button>
-          </div>
           <p className={styles.hint}>{t('contextAutoCompressHint')}</p>
         </section>
 
@@ -214,6 +205,30 @@ export const ContextPanel = ({ session, onClose }: { session: Session; onClose: 
 
         <footer className={styles.note}>{t('contextHint')}</footer>
       </aside>
+      {confirmingAuto ? (
+        <Modal
+          title={t('contextAutoConfirmTitle')}
+          onClose={() => setConfirmingAuto(false)}
+          footer={
+            <>
+              <Button variant="outlined" size="m" onClick={() => setConfirmingAuto(false)}>
+                {t('cancel')}
+              </Button>
+              <Button
+                size="m"
+                onClick={() => {
+                  setAutoCompact(true)
+                  setConfirmingAuto(false)
+                }}
+              >
+                {t('contextAutoConfirmOk')}
+              </Button>
+            </>
+          }
+        >
+          {t('contextAutoConfirmDescription')}
+        </Modal>
+      ) : null}
     </>
   )
 }

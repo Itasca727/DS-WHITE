@@ -280,7 +280,11 @@ export const en = {
   contextCompressStatus: 'First {count} rounds compressed',
   contextCompressHint: 'Only the earliest N rounds become a summary; the rest is sent as-is. 0 means no compression.',
   contextAutoCompress: 'Auto-compress',
-  contextAutoCompressHint: 'When enabled, rounds beyond the budget are automatically summarized; an explicit number takes priority.',
+  contextAutoConfirmTitle: 'Turn on auto compaction?',
+  contextAutoConfirmDescription:
+    'This is the same global switch as “Settings › Auto-compact context” and applies to every chat: when a chat nears the 1M-token limit, the model first summarizes the earliest rounds (one extra model call); the original messages stay in your history. You can turn it off here or in Settings anytime.',
+  contextAutoConfirmOk: 'Turn on',
+  contextAutoCompressHint: 'Synced with “Settings › Auto-compact context” and applies to every chat: near the 1M limit the model summarizes the earliest rounds.',
   memoryTitle: 'Memory',
   memoryTabPersona: 'Persona',
   memoryTabCore: 'Core anchors',

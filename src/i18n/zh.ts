@@ -271,7 +271,11 @@ export const zh = {
   contextCompressStatus: '已压缩前 {count} 轮',
   contextCompressHint: '只把最早 N 轮换成摘要，其余仍原样发送；0 表示不压缩。',
   contextAutoCompress: '自动压缩',
-  contextAutoCompressHint: '开启后，历史超过预算会自动把最早若干轮压成摘要；显式压缩优先。',
+  contextAutoConfirmTitle: '开启自动压缩？',
+  contextAutoConfirmDescription:
+    '这是全局开关，和「设置 › 自动压缩上下文」是同一个，对所有对话生效：对话快到 1M token 上限时，会先让模型把最早的若干轮整理成摘要再继续（额外调用一次模型），原文仍保留在记录里。随时可以在这里或设置里关闭。',
+  contextAutoConfirmOk: '开启',
+  contextAutoCompressHint: '与「设置 › 自动压缩上下文」同步，对所有对话生效：快到 1M 上限时由模型把最早的对话整理成摘要。',
   memoryTitle: '记忆控制台',
   memoryTabPersona: '人格',
   memoryTabCore: '核心锚点',
