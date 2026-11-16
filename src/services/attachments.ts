@@ -3,6 +3,7 @@ import type { LinkedMessage, TranslationMessage } from '../i18n/index.js'
 import { uploadFile } from './api/client.js'
 import { classifyApiError, getUploadErrorInfo, isRetryableApiError } from './api/errors.js'
 import type { FilePurpose } from './api/types.js'
+import { toSupportedImage, UnsupportedImageError } from './imageFormat.js'
 import { ACCEPT_FILE_EXTS } from './uploadExts.js'
 
 /** 允许上传的扩展名，按扩展名白名单过滤，清单见 uploadExts.ts */
@@ -62,6 +63,9 @@ export const validateFiles = (files: File[], currentCount: number): TranslationM
  * 服务端原文多为英文且较长，不直接展示。
  */
 export const describeUploadError = (error: unknown): TranslationMessage => {
+  if (error instanceof UnsupportedImageError) {
+    return { key: 'uploadUnsupportedImage' }
+  }
   if (classifyApiError(error) === 'serverBusy') {
     return { key: 'uploadServerBusy' }
   }
@@ -131,7 +135,12 @@ const enqueueUpload = (
         return
       }
       try {
-        const body = file instanceof File ? file : new File([file], name, { type: file.type })
+        // 图片先转成模型支持的格式（BMP、TIFF、AVIF、SVG、HEIC 等转成 JPEG）
+        const ready = isImage ? await toSupportedImage(file, name) : { blob: file, name }
+        const body =
+          ready.blob instanceof File && ready.name === name
+            ? ready.blob
+            : new File([ready.blob], ready.name, { type: ready.blob.type })
         resolve((await uploadFile(apiKey, body, getUploadPurpose(name, isImage), signal)).id)
       } catch (error) {
         reject(error)

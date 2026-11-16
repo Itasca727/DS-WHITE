@@ -4,6 +4,7 @@ import { ApiError, streamMessage } from '../api/client.js'
 import type { ChatModel, CreateMessageRequest } from '../api/types.js'
 import { extractFileIds, getFileErrorCode, isRetryableApiError } from '../api/errors.js'
 import { cancelUpload, describeUploadError, uploadAttachment, useUploads } from '../attachments.js'
+import { UnsupportedImageError } from '../imageFormat.js'
 import { useSettings } from '../settings.js'
 import { appendBranch, getVisibleMessages, normalizeSession, selectVersion } from './branches.js'
 import * as db from './db.js'
@@ -58,6 +59,8 @@ const SESSION_CACHE_LIMIT = 5
 const SAFETY_CHECK = { level: 'high' } as const
 /** 服务端判定 file_id 失效后，重新补传并重发的最多次数（不含首次请求） */
 const FILE_RETRY_LIMIT = 2
+/** 「图片格式不支持」时逐张剔除后重发的次数上限（每次剔除报错点名的那张） */
+const IMAGE_RETRY_LIMIT = 8
 /** 退避基数，第 n 次重试等待 2^n 倍；连续失败达到上限就放弃，把原始报错展示出来 */
 const FILE_RETRY_BASE_DELAY = 1000
 
@@ -988,11 +991,87 @@ const ensureServerId = async (apiKey: string, file: FileAttachment): Promise<str
   if (task?.status === 'done') {
     return task.serverId
   }
+  if (file.unsupported) {
+    return null
+  }
   const blob = await db.loadFile(file.id)
   if (!blob) {
     return null
   }
   return uploadAttachment(apiKey, file.id, blob, file.name, file.isImage)
+}
+
+/**
+ * 把附件标成「模型不支持的图片」：之后只在界面展示，请求里换成一句文字说明。
+ * 返回是否真的标了新的附件。
+ */
+const markUnsupportedImages = (
+  sessionId: string,
+  match: (file: FileAttachment) => boolean
+): boolean => {
+  const session = getSession(sessionId)
+  if (!session) {
+    return false
+  }
+  let marked = false
+  const messages = session.messages.map((message) => {
+    if (message.role !== 'user' || !message.files.some((file) => !file.unsupported && match(file))) {
+      return message
+    }
+    marked = true
+    return {
+      ...message,
+      files: message.files.map((file) =>
+        !file.unsupported && match(file) ? { ...file, unsupported: true } : file
+      ),
+    }
+  })
+  if (marked) {
+    updateSession(sessionId, (current) => ({ ...current, messages }))
+    persist(sessionId)
+  }
+  return marked
+}
+
+const UNSUPPORTED_IMAGE = /unsupported image/i
+
+/**
+ * 服务端拒绝了某张图（「messages.N.content.M: You have uploaded an unsupported image」）：
+ * 按报错里的位置找到那张图的 file_id，标记后重发；位置对不上时把这次请求里的图全部标掉，
+ * 免得这段对话之后每一轮都发不出去。
+ */
+const dropRejectedImage = (
+  sessionId: string,
+  sent: CreateMessageRequest['messages'],
+  error: unknown
+): boolean => {
+  if (!(error instanceof ApiError) || !UNSUPPORTED_IMAGE.test(error.message)) {
+    return false
+  }
+  const position = /messages\.(\d+)\.content\.(\d+)/.exec(error.message)
+  const content = position ? sent[Number(position[1])]?.content : undefined
+  const block = Array.isArray(content) ? content[Number(position?.[2])] : undefined
+  const fileId =
+    block && block.type === 'image' && 'source' in block && block.source.type === 'file'
+      ? block.source.file_id
+      : null
+  if (fileId) {
+    return markUnsupportedImages(sessionId, (file) => file.serverId === fileId)
+  }
+  const sentIds = new Set<string>()
+  for (const message of sent) {
+    if (Array.isArray(message.content)) {
+      for (const item of message.content) {
+        if (item.type === 'image' && 'source' in item && item.source.type === 'file') {
+          sentIds.add(item.source.file_id)
+        }
+      }
+    }
+  }
+  return markUnsupportedImages(
+    sessionId,
+    (file) => file.isImage && file.serverId !== null && sentIds.has(file.serverId)
+  )
 }
 
 /** 用会话里的最新消息替换请求快照：重传前会重置附件的 serverId，快照必须跟着更新 */
@@ -1063,8 +1142,11 @@ const prepareFiles = async (sessionId: string, request: Request, signal: AbortSi
         serverIds.set(file.id, serverId)
         saveServerIds(sessionId, new Map([[file.id, serverId]]))
       }
-    } catch {
+    } catch (error) {
       signal.throwIfAborted()
+      if (error instanceof UnsupportedImageError) {
+        markUnsupportedImages(sessionId, (item) => item.id === file.id)
+      }
     }
   }
 
@@ -1186,6 +1268,9 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
   streamFlushes.set(sessionId, flush)
 
   try {
+    /** 本次尝试实际发出的消息，报「图片不支持」时据此找到是哪张图 */
+    let sentMessages: CreateMessageRequest['messages'] = []
+    let imageRetries = 0
     for (let attempt = 0; ; attempt += 1) {
       /** 附件补齐前出错属于上传失败，请求还没有发出 */
       let preparing = true
@@ -1244,6 +1329,7 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
           latestReminder,
           getSession(sessionId)
         )
+        sentMessages = built.messages
         const events = streamMessage(
           useSettings.getState().apiKey ?? '',
           {
@@ -1294,6 +1380,16 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
             retryable: isRetryableApiError(error),
           })
           break
+        }
+        // 图片格式不被接受：把那张图标成不支持（之后只展示、不发送），再重发
+        if (
+          imageRetries < IMAGE_RETRY_LIMIT &&
+          !receivedContent &&
+          dropRejectedImage(sessionId, sentMessages, error)
+        ) {
+          imageRetries += 1
+          attempt -= 1
+          continue
         }
         // 附件失效：重新补传后重发。收到过内容块（含丢弃的客户端工具）后不自动重发。
         if (

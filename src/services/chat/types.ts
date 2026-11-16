@@ -23,6 +23,8 @@ export type FileAttachment = {
   isImage: boolean
   /** 具体 MIME；导入时没有原件或无法识别的为空字符串，不影响图片身份。 */
   mimeType: string
+  /** 图片格式模型不支持、也转不成支持的格式：只在界面展示，不再随请求发送 */
+  unsupported?: boolean
 }
 
 /** 本地消息的分支关系；字段缺省时按线性消息列表处理。 */

@@ -20,8 +20,8 @@ import type {
  * 发送前 streamReply 会先补齐 serverId；仍为 null 的是本地没有原件的附件，不进入请求。
  */
 const toFileBlocks = (files: FileAttachment[]): FileBlockParam[] =>
-  files.flatMap(({ serverId, isImage }) =>
-    serverId
+  files.flatMap(({ serverId, isImage, unsupported }) =>
+    serverId && !unsupported
       ? [
           {
             type: isImage ? 'image' : 'document',
@@ -204,11 +204,16 @@ const isUsableReply = (message: Message): message is AssistantMessage =>
 /** 有文件时用内容块数组：先文件后文本，文件按 Files API 的 file_id 引用 */
 const toUserParam = ({ content, files }: UserMessage): MessageParam => {
   const blocks = toFileBlocks(files)
+  // 发不出去的图片留一句说明，模型才知道这里原本有图
+  const skipped = files
+    .filter((file) => file.unsupported)
+    .map((file) => `[图片「${file.name}」格式不受支持，未发送]`)
+  const text = [...skipped, content].filter(Boolean).join('\n')
   return blocks.length === 0
-    ? { role: 'user', content }
+    ? { role: 'user', content: text }
     : {
         role: 'user',
-        content: [...blocks, ...(content ? [{ type: 'text' as const, text: content }] : [])],
+        content: [...blocks, ...(text ? [{ type: 'text' as const, text }] : [])],
       }
 }
 
@@ -322,7 +327,11 @@ export const toRequestMessages = (
       continue
     }
     // 历史提问没有文字、附件也都没有 serverId 时，提问为空，连同回答一起省略。
-    if (!user.content && toFileBlocks(user.files).length === 0) {
+    if (
+      !user.content &&
+      toFileBlocks(user.files).length === 0 &&
+      !user.files.some((file) => file.unsupported)
+    ) {
       continue
     }
     appendReminder(reply.latestReminder)

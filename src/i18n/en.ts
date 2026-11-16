@@ -230,6 +230,7 @@ export const en = {
   uploadMaxFiles: 'You can upload up to {count} files',
   uploadFileStatusUploading: 'Uploading...',
   uploadServerBusy: 'Server busy',
+  uploadUnsupportedImage: 'Unsupported image format',
   uploadParseFailed: 'Parsing failed',
   uploadFileCountLimit: 'Uploaded file limit reached ({limit} files). ',
   uploadStorageLimit: 'Uploaded file storage limit reached ({limit} GB). ',
