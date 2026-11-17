@@ -194,23 +194,52 @@ type CardRow = { rule: string; cells: string[][] }
 
 /**
  * 单列卡片里的「左边名字 \hfill 右边状态」：
- * 每行做成和最长分隔线（或这行自己左右两段加空隙）一样宽的盒子，左段贴左、右段贴右。
+ * 所有行做成同样宽的盒子（取分隔线和最宽几行里最宽的那个），左段贴左、右段贴右，右栏整齐落在卡片右边；
+ * 分隔线左右各放一份，盖满整个宽度，不会比内容短。
  * 宽度用 \phantom 按真实字形量，不靠估算，手机换了字体也对得齐
  */
 const hfillCard = (spec: string, rows: CardRow[], dividerRow: (row: CardRow) => boolean) => {
+  const split = rows.map(({ cells }) => {
+    const pieces = (cells[0] ?? []).map((piece) => piece.trim())
+    if (pieces.length < 2) {
+      return null
+    }
+    return { left: pieces.slice(0, -1).filter(Boolean).join('\\quad '), right: pieces.at(-1) ?? '' }
+  })
+  // 量宽度的候选：所有分隔线 + 估算最宽的几行（行很多时不必每行都量）
   const dividers = [...new Set(rows.filter(dividerRow).map((row) => row.cells[0][0].trim()))]
-  const lines = rows.map(({ rule, cells }) => {
+  const others = rows
+    .map((row, index) => {
+      if (!row.cells.length || dividerRow(row)) {
+        return ''
+      }
+      const pair = split[index]
+      return pair ? `${pair.left}\\quad ${pair.right}` : (row.cells[0]?.[0] ?? '').trim()
+    })
+    .filter(Boolean)
+  const widest = [...new Set(others)]
+    .map((text) => ({ text, width: textWidth(text) }))
+    .sort((a, b) => b.width - a.width)
+    .slice(0, 4)
+    .map(({ text }) => text)
+  const box = `\\smash{\\begin{matrix}${[...dividers, ...widest]
+    .map((text) => `\\phantom{\\text{${text}}}`)
+    .join(' \\\\ ')}\\end{matrix}}`
+  const lines = rows.map((row, index) => {
+    const { rule, cells } = row
     if (!cells.length) {
       return rule
     }
-    const pieces = (cells[0] ?? []).map((piece) => piece.trim())
-    if (pieces.length < 2) {
-      return `${rule}${pieces[0] ? `\\text{${pieces[0]}}` : ''}`
+    if (dividerRow(row)) {
+      const line = `\\text{${cells[0][0].trim()}}`
+      return `${rule}\\rlap{${line}}${box}\\llap{${line}}`
     }
-    const left = pieces.slice(0, -1).filter(Boolean).join('\\quad ')
-    const right = pieces.at(-1) ?? ''
-    const widths = [...dividers, `${left}\\quad ${right}`].map((text) => `\\phantom{\\text{${text}}}`)
-    return `${rule}\\rlap{\\text{${left}}}\\smash{\\begin{matrix}${widths.join(' \\\\ ')}\\end{matrix}}\\llap{\\text{${right}}}`
+    const pair = split[index]
+    if (!pair) {
+      const text = (cells[0]?.[0] ?? '').trim()
+      return `${rule}${text ? `\\text{${text}}` : ''}`
+    }
+    return `${rule}\\rlap{\\text{${pair.left}}}${box}\\llap{\\text{${pair.right}}}`
   })
   return `\\text{$\\def\\arraystretch{${ROW_STRETCH}}\\begin{array}{${spec}}${lines.join(' \\\\ ')}\\end{array}$}`
 }
