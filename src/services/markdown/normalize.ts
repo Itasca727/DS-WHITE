@@ -8,6 +8,7 @@
  * - 表格行里行内公式中的 |（如 $|x|$）换成 \vert，不再把表格切坏
  * - 模型用 LaTeX 画的卡片（\colorbox、\fbox、tabular…）没包 $$、或者包在 ```latex 代码块里时，按公式块显示
  * - 去掉零宽字符（BOM 等），它们夹在 $$ 前面会让公式块认不出来
+ * - 公式块的 $$ 和文字写在同一行（「旁白 $$\colorbox…」「…}$$ 后文」）时，把 $$ 拆到单独一行
  */
 
 const FENCE = /^\s*(`{3,}|~{3,})/
@@ -51,6 +52,22 @@ const CARD_START = /^\\(?:colorbox|fcolorbox|fbox|framebox|boxed)\s*\{/
 const isLatexCard = (content: string) =>
   /\\(?:colorbox|fcolorbox|fbox|textcolor)\b|\\begin\{tabular\}/.test(content) &&
   !/\\(?:documentclass|usepackage)\b|\\begin\{document\}/.test(content)
+
+/** 找 $$（跳过 \$$ 和行内代码 `…` 里的），找不到返回 -1 */
+const findDollars = (line: string, from = 0) => {
+  let code = false
+  for (let i = from; i < line.length - 1; i++) {
+    const char = line[i]
+    if (char === '`') {
+      code = !code
+    } else if (char === '\\') {
+      i++
+    } else if (!code && char === '$' && line[i + 1] === '$') {
+      return i
+    }
+  }
+  return -1
+}
 
 const ZERO_WIDTH = /\uFEFF|\u200B|\u200C|\u200D|\u2060/g
 
@@ -134,7 +151,9 @@ export const normalizeMarkdown = (input: string): string => {
     if (fenceMatch && !math) {
       // ```math 代码块，或画卡片的 ```latex 代码块：写完后按公式块显示
       const lang = trimmed.slice(fenceMatch[1].length).trim().toLowerCase()
-      if (['math', 'latex', 'tex', 'katex'].includes(lang)) {
+      // 不带语言（或标成 text）的代码块里如果整块都是 LaTeX 卡片，也按卡片渲染：
+      // 模型在同一个对话里会照着前文的写法输出，一旦用了这种包法，重新生成也一直是代码
+      if (['math', 'latex', 'tex', 'katex', '', 'text', 'txt', 'plain', 'plaintext'].includes(lang)) {
         let close = -1
         for (let j = i + 1; j < lines.length; j++) {
           if (lines[j].trim().startsWith(fenceMatch[1])) {
@@ -142,8 +161,23 @@ export const normalizeMarkdown = (input: string): string => {
             break
           }
         }
-        const content = lines.slice(i + 1, close)
-        if (close !== -1 && (lang === 'math' || lang === 'katex' || isLatexCard(content.join('\n')))) {
+        // 代码块里自己又包了一层 $$ 或 \[ \] 时去掉，避免套两层
+        let content = lines.slice(i + 1, close)
+        while (content.length && !content[0].trim()) {
+          content = content.slice(1)
+        }
+        while (content.length && !content.at(-1)!.trim()) {
+          content = content.slice(0, -1)
+        }
+        if (
+          content.length >= 2 &&
+          ((content[0].trim() === '$$' && content.at(-1)!.trim() === '$$') ||
+            (content[0].trim() === '\\[' && content.at(-1)!.trim() === '\\]'))
+        ) {
+          content = content.slice(1, -1)
+        }
+        const mathOnly = lang === 'math' || lang === 'katex'
+        if (close !== -1 && (mathOnly || isLatexCard(content.join('\n')))) {
           out.push(`${indent}$$`, ...content, `${indent}$$`)
           i = close
           continue
@@ -155,9 +189,19 @@ export const normalizeMarkdown = (input: string): string => {
     }
 
     if (math === '$$') {
+      const close = findDollars(trimmed)
       if (trimmed === '$$') {
         math = null
         out.push(line)
+      } else if (close > 0 && close < trimmed.length - 2) {
+        // `…}$$ 后面还有文字`：$$ 收尾，文字另起一段
+        out.push(
+          `${indent}${trimmed.slice(0, close).trimEnd()}`,
+          `${indent}$$`,
+          '',
+          `${indent}${trimmed.slice(close + 2).trimStart()}`
+        )
+        math = null
       } else if (trimmed.endsWith('$$') && !trimmed.endsWith('\\$$')) {
         // `最后一行 $$`
         out.push(`${indent}${trimmed.slice(0, -2).trimEnd()}`, `${indent}$$`)
@@ -172,6 +216,19 @@ export const normalizeMarkdown = (input: string): string => {
         math = null
       }
       out.push(line)
+      continue
+    }
+
+    // `旁白 $$` 或 `旁白 $$\colorbox{…`：这一行只有一个 $$，是公式块的开头，拆到单独一行
+    const open = findDollars(trimmed)
+    if (open > 0 && findDollars(trimmed, open + 2) === -1 && !inlineOpen) {
+      const before = trimmed.slice(0, open).trimEnd()
+      const after = trimmed.slice(open + 2).trim()
+      out.push(`${indent}${before}`, '', `${indent}$$`)
+      if (after) {
+        out.push(`${indent}${after}`)
+      }
+      math = '$$'
       continue
     }
 
