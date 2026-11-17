@@ -220,10 +220,14 @@ export const normalizeMarkdown = (input: string): string => {
     }
 
     // `旁白 $$` 或 `旁白 $$\colorbox{…`：这一行只有一个 $$，是公式块的开头，拆到单独一行
+    // 只有后面确实是 LaTeX 才算：$$ 后紧跟 \命令，或 $$ 在行尾且下一行以 \ 开头；
+    // 否则「用 $$ 包起来」这种正文会被误当成公式块
     const open = findDollars(trimmed)
-    if (open > 0 && findDollars(trimmed, open + 2) === -1 && !inlineOpen) {
+    const after = open > 0 ? trimmed.slice(open + 2).trim() : ''
+    const nextLine = lines.slice(i + 1).find((next) => next.trim())?.trim() ?? ''
+    const looksLikeMath = after ? after.startsWith('\\') : nextLine.startsWith('\\')
+    if (open > 0 && findDollars(trimmed, open + 2) === -1 && !inlineOpen && looksLikeMath) {
       const before = trimmed.slice(0, open).trimEnd()
-      const after = trimmed.slice(open + 2).trim()
       out.push(`${indent}${before}`, '', `${indent}$$`)
       if (after) {
         out.push(`${indent}${after}`)

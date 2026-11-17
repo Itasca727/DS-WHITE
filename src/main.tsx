@@ -11,7 +11,8 @@ import './app/theme.css'
 import './app/global.css'
 import './app/white.css'
 
-ensureKatex()
+// 预先加载公式引擎；失败无所谓，真正显示公式时会重试
+void Promise.resolve(ensureKatex()).catch(() => {})
 setupTheme()
 setupPwa()
 setupTapSound()

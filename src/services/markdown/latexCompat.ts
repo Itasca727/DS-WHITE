@@ -6,6 +6,8 @@
  * - tabular 换成 array；tabular 的格子是文字模式，所以每格包进 \text{}
  * - 格子里的 \hfill 拆成右对齐的新列，效果同「左边一段、右边一段」
  * - 整个表格包成 \text{$…$}，这样放在 \colorbox、\fbox 里也能用
+ * - 修回被吃掉的 \t：指令文本经过某些工具复制后，\textcolor 里的 \t 会变成 Tab 字符，只剩「Tab + extcolor」
+ * - 去掉模型输出时加的 Markdown 转义（\[人名\]、\>）：在 LaTeX 里 \[ 是「开始公式块」，放在卡片中间直接报错
  * - 其余 KaTeX 不认、只影响排版的命令（\centering、\vspace、多余的 \hfill）去掉或换成空白
  */
 
@@ -181,8 +183,45 @@ const convertTabular = (spec: string, body: string) => {
 
 const BEGIN_TABULAR = /\\begin\{tabular\*?\}/g
 
+/** 模型给标点加的 Markdown 转义；在卡片里一律还原成标点本身 */
+const MARKDOWN_ESCAPED = new Set(['[', ']', '(', ')', '<', '>', '*', '-', '!', '`', '|'])
+
+const isCard = (source: string) =>
+  /\\(?:colorbox|fcolorbox|fbox|textcolor)\b|\\begin\{tabular/.test(source)
+
+/** 逐字扫描：\\ 换行符原样保留，\[ \> 这类转义还原成 [ > */
+const unescapeMarkdown = (source: string) => {
+  let result = ''
+  for (let i = 0; i < source.length; i++) {
+    const char = source[i]
+    if (char !== '\\') {
+      result += char
+      continue
+    }
+    const next = source[i + 1]
+    if (next === '\\') {
+      result += '\\\\'
+      i++
+    } else if (next !== undefined && MARKDOWN_ESCAPED.has(next)) {
+      result += next
+      i++
+    } else {
+      result += char
+    }
+  }
+  return result
+}
+
+/** 「Tab + extcolor」这类：\t 开头的命令被当成制表符吃掉，修回去 */
+const EATEN_TAB =
+  /\t(ext(?:color|bf|it|rm|sf|tt|normal|up)?|imes|frac|heta|au|ilde|an|ag|op|riangle|herefore|extstyle)(?![A-Za-z])/g
+
 export const fixLatex = (input: string): string => {
-  let source = input.replace(ZERO_WIDTH, '')
+  let source = input.replace(ZERO_WIDTH, '').replace(EATEN_TAB, '\\t$1')
+  if (isCard(source)) {
+    // 中间点 · 在 KaTeX 的文字模式里会报错，换成外观相同的「・」
+    source = unescapeMarkdown(source).replace(/\u00B7/g, '\u30FB')
+  }
   if (source.includes('\\begin{tabular')) {
     let result = ''
     let last = 0

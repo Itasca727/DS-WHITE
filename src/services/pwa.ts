@@ -61,6 +61,21 @@ export const recoverFromStaleChunk = (error: unknown): boolean => {
   return true
 }
 
+/**
+ * 按需加载的部分（公式引擎等）加载不到时：确认是网站更新导致的，空闲就刷新到新版；
+ * 正在生成或有草稿就先记下，等切到后台再刷新，不打断用户。
+ */
+export const reloadForStaleChunk = (error: unknown) => {
+  if (!isStaleChunkError(error)) {
+    return
+  }
+  if (isIdle()) {
+    recoverFromStaleChunk(error)
+  } else {
+    updatePending = true
+  }
+}
+
 let resumedAt = performance.now()
 let updatePending = false
 
@@ -108,7 +123,7 @@ export const setupPwa = () => {
 
   // 兜底：没被调用方处理的加载失败（代码高亮、公式等按需加载的部分）
   window.addEventListener('unhandledrejection', (event) => {
-    recoverFromStaleChunk(event.reason)
+    reloadForStaleChunk(event.reason)
   })
 
   if (navigator.storage && typeof navigator.storage.persist === 'function') {

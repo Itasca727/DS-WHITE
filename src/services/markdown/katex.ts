@@ -12,6 +12,12 @@ export const ensureKatex = (): Katex | Promise<Katex> => {
     import('katex'),
     import('katex/contrib/mhchem'),
     import('katex/dist/katex.min.css'),
-  ]).then(([module]) => (katex = module.default))
+  ])
+    .then(([module]) => (katex = module.default))
+    .catch((error: unknown) => {
+      // 失败不能记住：清掉，下次（重试或下一个公式）重新加载
+      katexPromise = null
+      throw error
+    })
   return katexPromise
 }
