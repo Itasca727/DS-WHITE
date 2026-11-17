@@ -1,5 +1,6 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { ensureKatex, type Katex } from '../../services/markdown/katex.js'
+import { fixLatex } from '../../services/markdown/latexCompat.js'
 
 /** renderToString 外层包裹的标签，组件自己渲染外层，这里切掉 */
 const KATEX_WRAPPER = {
@@ -25,7 +26,7 @@ const MACROS = {
 }
 
 const render = (katex: Katex, input: string, displayMode: boolean) =>
-  katex.renderToString(input, {
+  katex.renderToString(fixLatex(input), {
     throwOnError: true,
     strict: false,
     displayMode,

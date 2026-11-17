@@ -1,9 +1,20 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import clsx from 'clsx'
+import { useEffect, useState, type CSSProperties, type ReactNode } from 'react'
 import { useTranslate } from '../../i18n/index.js'
 import { haptic } from '../../utils/haptic.js'
 import { Button } from './Button.js'
+import { IconDownloadOutline16, IconRefreshOutline16 } from './icons.js'
 import { Modal } from './Modal.js'
+import { Signature } from './Signature.js'
 import styles from './IntroNotice.module.css'
+
+/** 免费：一枚小小的「0」硬币 */
+const IconFree = () => (
+  <svg width={16} height={16} viewBox="0 0 16 16" fill="none" aria-hidden="true">
+    <circle cx="8" cy="8" r="6.35" stroke="currentColor" strokeWidth="1.3" />
+    <ellipse cx="8" cy="8" rx="2.1" ry="3" stroke="currentColor" strokeWidth="1.3" />
+  </svg>
+)
 
 const KEY = 'chat-demo:intro-ack'
 
@@ -74,10 +85,14 @@ export const IntroNotice = () => {
   return (
     <Modal
       title={
-        <>
-          {t('introTitle')}
+        <div className={styles.hero}>
+          {/* 装饰用，不读进弹窗标题 */}
+          <span aria-hidden="true" className={styles.logo}>
+            <Signature width={124} motion="write" alt="" />
+          </span>
+          <span className={styles.heading}>{t('introTitle')}</span>
           <em className={styles.motto}>{t('introMotto')}</em>
-        </>
+        </div>
       }
       className={styles.dialog}
       // 必须点按钮确认，Esc 和点遮罩都不关
@@ -88,11 +103,23 @@ export const IntroNotice = () => {
         </Button>
       }
     >
-      <div className={styles.body}>
-        <p>{emphasize(t('introLocal'))}</p>
-        <p>{emphasize(t('introUpdate'))}</p>
-        <p>{emphasize(t('introFree'))}</p>
-      </div>
+      <ol className={styles.body}>
+        {[
+          { icon: <IconDownloadOutline16 />, title: t('introLocalTitle'), text: t('introLocal') },
+          { icon: <IconRefreshOutline16 />, title: t('introUpdateTitle'), text: t('introUpdate') },
+          { icon: <IconFree />, title: t('introFreeTitle'), text: t('introFree') },
+        ].map((item, index) => (
+          <li key={item.title} className={styles.item} style={{ '--i': index } as CSSProperties}>
+            <span className={clsx(styles.icon, 'white-glass')} aria-hidden="true">
+              {item.icon}
+            </span>
+            <div className={styles.itemBody}>
+              <div className={styles.itemTitle}>{item.title}</div>
+              <p>{emphasize(item.text)}</p>
+            </div>
+          </li>
+        ))}
+      </ol>
     </Modal>
   )
 }

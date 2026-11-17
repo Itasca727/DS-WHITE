@@ -16,6 +16,7 @@ import { MobileHeader } from '../components/session/MobileHeader.js'
 import { Welcome } from '../components/session/Welcome.js'
 import { ensureApiKey } from '../components/settings/settingsDialogState.js'
 import { SettingsDialog } from '../components/settings/SettingsDialog.js'
+import { AboutPage } from '../components/about/AboutPage.js'
 import { HistorySearchPage } from '../components/historySearch/HistorySearchPage.js'
 import { BackupPrompt } from '../components/base/BackupPrompt.js'
 import { IntroNotice } from '../components/base/IntroNotice.js'
@@ -140,6 +141,7 @@ export const App = () => {
       <Toast />
       <BackupPrompt />
       <HistorySearchPage />
+      <AboutPage />
       <IntroNotice />
     </>
   )

@@ -81,7 +81,7 @@ export const normalizeMarkdown = (input: string): string => {
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]
-    const indent = line.match(/^[ \t]*/)![0]
+    const indent = line.slice(0, line.length - line.trimStart().length)
     const trimmed = line.trim()
 
     if (fence) {

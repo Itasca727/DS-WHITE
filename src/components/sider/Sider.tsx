@@ -1,7 +1,14 @@
 import clsx from 'clsx'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useTranslate } from '../../i18n/index.js'
-import { IconPanelLeftOutline16, IconSearchOutline16, IconSettingsOutline16, NewChatIcon } from '../base/icons.js'
+import {
+  IconMailOutline16,
+  IconPanelLeftOutline16,
+  IconSearchOutline16,
+  IconSettingsOutline16,
+  NewChatIcon,
+} from '../base/icons.js'
+import { openAbout } from '../about/aboutState.js'
 import { setSiderCollapsed } from '../../services/settings.js'
 import { groupSessions } from '../../services/chat/sessionGroups.js'
 import { newChat, removeSession, useChatStore } from '../../services/chat/store.js'
@@ -116,6 +123,17 @@ export const Sider = ({ mobile = false }: { mobile?: boolean }) => {
             <IconSettingsOutline16 />
           </span>
           <span className={styles.settingsLabel}>{t('settings')}</span>
+        </button>
+        <button
+          type="button"
+          className={styles.settings}
+          aria-label={t('aboutTitle')}
+          onClick={(event) => openAbout(event.currentTarget)}
+        >
+          <span className={styles.settingsIcon}>
+            <IconMailOutline16 />
+          </span>
+          <span className={styles.settingsLabel}>{t('siderAbout')}</span>
         </button>
       </div>
       {deleting ? (

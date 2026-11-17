@@ -238,6 +238,13 @@ export function toMdAst(
   return ast
 }
 
+/** 一串相邻节点合起来的位置 */
+const spanOf = (nodes: PhrasingContent[]) => {
+  const start = nodes[0]?.position?.start
+  const end = nodes.at(-1)?.position?.end
+  return start && end ? { start, end } : undefined
+}
+
 /** $$…$$、\[…\] 写在一段文字中间时，按公式块单独成行显示，而不是缩成行内小公式 */
 const splitDisplayMath = (node: Paragraph, raw: (node: Nodes) => string): Nodes[] => {
   node.children = pairHtmlTags(node.children)
@@ -263,10 +270,7 @@ const splitDisplayMath = (node: Paragraph, raw: (node: Nodes) => string): Nodes[
       result.push({
         type: 'paragraph',
         children: pending,
-        position: {
-          start: pending[0].position?.start ?? node.position!.start,
-          end: pending.at(-1)!.position?.end ?? node.position!.end,
-        },
+        position: spanOf(pending) ?? node.position,
       })
     }
     pending = []
