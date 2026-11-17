@@ -14,6 +14,24 @@ type MathHtmlResult = {
 
 const noop = () => {}
 
+/** 模型常用、但 KaTeX 没有内置的几个命令 */
+const MACROS = {
+  '\\abs': '\\left\\lvert #1 \\right\\rvert',
+  '\\norm': '\\left\\lVert #1 \\right\\rVert',
+  '\\dd': '\\mathrm{d}',
+  '\\argmax': '\\operatorname*{arg\\,max}',
+  '\\argmin': '\\operatorname*{arg\\,min}',
+  '\\sgn': '\\operatorname{sgn}',
+}
+
+const render = (katex: Katex, input: string, displayMode: boolean) =>
+  katex.renderToString(input, {
+    throwOnError: true,
+    strict: false,
+    displayMode,
+    macros: { ...MACROS },
+  })
+
 /** KaTeX 渲染公式；出错时保留上次成功的结果（流式中公式未写完），没有则展示原文 */
 const useMathHtml = (input: string, isInline: boolean): MathHtmlResult => {
   const previousResultRef = useRef<MathHtmlResult | null>(null)
@@ -34,9 +52,7 @@ const useMathHtml = (input: string, isInline: boolean): MathHtmlResult => {
     }
     try {
       const [prefix, suffix] = KATEX_WRAPPER[isInline ? 'inline' : 'display']
-      const html = katex
-        .renderToString(input, { throwOnError: true, strict: false, displayMode: !isInline })
-        .slice(prefix.length, -suffix.length)
+      const html = render(katex, input, !isInline).slice(prefix.length, -suffix.length)
       const result = { html, renderMode: 'katex' } as const
       previousResultRef.current = result
       return result
@@ -49,7 +65,12 @@ const useMathHtml = (input: string, isInline: boolean): MathHtmlResult => {
 export const MathBlock = memo(function MathBlock({ value }: { value: string }) {
   const { html, renderMode } = useMathHtml(value, false)
   if (renderMode === 'fallback') {
-    return <p className="ds-markdown-paragraph">{html}</p>
+    // 渲染不了的公式按源码显示，至少看得清
+    return (
+      <pre className="ds-markdown-math-raw">
+        <code>{html}</code>
+      </pre>
+    )
   }
   return (
     <span className="katex-display ds-markdown-math">
@@ -61,7 +82,7 @@ export const MathBlock = memo(function MathBlock({ value }: { value: string }) {
 export const InlineMath = memo(function InlineMath({ value }: { value: string }) {
   const { html, renderMode } = useMathHtml(value, true)
   if (renderMode === 'fallback') {
-    return html
+    return <code className="ds-markdown-math-raw">{html}</code>
   }
   return <span className="katex" dangerouslySetInnerHTML={{ __html: html }}></span>
 })

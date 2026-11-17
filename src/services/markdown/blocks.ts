@@ -1,5 +1,6 @@
 import type { MarkdownBlock } from '../../components/markdown/MarkdownAstRenderer.js'
 import type { Source } from '../chat/view.js'
+import { normalizeMarkdown } from './normalize.js'
 import { toMdAst } from './parse.js'
 
 type Options = { sources: Source[] | undefined; disableLink: boolean }
@@ -49,6 +50,8 @@ export const toMarkdownBlocks = (
   previous: BlockCache | null,
   incremental: boolean
 ): BlockCache => {
+  // 先统一改写公式写法；之后的切分、位置都以改写后的文本为准
+  input = normalizeMarkdown(input)
   if (
     incremental &&
     previous &&
@@ -56,7 +59,11 @@ export const toMarkdownBlocks = (
     previous.options.disableLink === options.disableLink &&
     previous.blocks.length > REPARSE_TAIL
   ) {
-    const keep = previous.blocks.length - REPARSE_TAIL
+    let keep = previous.blocks.length - REPARSE_TAIL
+    // 同一行拆出来的几块（文字中间的 $$公式$$）要一起重新解析，不能从中间切
+    while (keep > 0 && previous.starts[keep - 1] === previous.starts[keep]) {
+      keep--
+    }
     const cut = previous.starts[keep]
     const stable = previous.input.slice(0, cut)
     if (input.length >= cut && input.startsWith(stable) && !DEFINITION.test(stable)) {

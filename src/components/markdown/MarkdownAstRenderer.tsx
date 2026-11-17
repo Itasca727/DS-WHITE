@@ -13,9 +13,55 @@ import { CodeBlock } from './CodeBlock.js'
 import { ImageAsLink, Link } from './Link.js'
 import { InlineMath, MathBlock } from './MathFormula.js'
 
-const Html = memo(function Html({ value }: { value: string }) {
-  if (/^<br\s*\/?>$/i.test(value)) {
+/** 回答里允许出现的 HTML 标签；属性一律去掉（details 的 open 除外） */
+const SAFE_TAGS = new Set([
+  'details', 'summary', 'div', 'p', 'span', 'br', 'hr', 'center',
+  'b', 'strong', 'i', 'em', 'u', 'ins', 'mark', 'kbd', 'small', 'del', 's', 'strike', 'sup', 'sub',
+  'code', 'pre', 'blockquote', 'ul', 'ol', 'li',
+  'table', 'thead', 'tbody', 'tr', 'th', 'td', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+])
+const KEEP_ATTRIBUTES = new Set(['open', 'colspan', 'rowspan'])
+
+/** 只由安全标签组成的 HTML 转成 React 元素；含其它标签（script、img、input…）返回 null，按原文显示 */
+const toSafeHtml = (value: string): ReactNode | null => {
+  const body = new DOMParser().parseFromString(value, 'text/html').body
+  let safe = true
+  const convert = (node: ChildNode, key: number): ReactNode => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      return node.textContent
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) {
+      return null
+    }
+    const element = node as Element
+    const tag = element.tagName.toLowerCase()
+    if (!SAFE_TAGS.has(tag)) {
+      safe = false
+      return null
+    }
+    const props: Record<string, unknown> = { key }
+    for (const attribute of element.attributes) {
+      if (KEEP_ATTRIBUTES.has(attribute.name)) {
+        props[attribute.name === 'colspan' ? 'colSpan' : attribute.name === 'rowspan' ? 'rowSpan' : attribute.name] =
+          attribute.name === 'open' ? true : attribute.value
+      }
+    }
+    const children = [...element.childNodes].map(convert)
+    return tag === 'br' || tag === 'hr' ? createElement(tag, props) : createElement(tag, props, ...children)
+  }
+  const result = [...body.childNodes].map(convert)
+  return safe ? result : null
+}
+
+const Html = memo(function Html({ value, block }: { value: string; block?: boolean }) {
+  if (/^<br\s*\/?>$/i.test(value.trim())) {
     return <br />
+  }
+  if (block) {
+    const safe = toSafeHtml(value)
+    if (safe !== null) {
+      return <div className="ds-markdown-html-block">{safe}</div>
+    }
   }
   return <span className="ds-markdown-html">{value}</span>
 })
@@ -139,8 +185,16 @@ const MarkdownPhrasingContentItem = memo(function MarkdownPhrasingContentItem({
       return <TextContent>{node.value}</TextContent>
     case 'citation':
       return <CitationLink source={node.source} />
+    case 'htmlInline':
+      return createElement(node.tag, null, <MarkdownPhrasingContent nodes={node.children} />)
+    case 'strike':
+      return (
+        <del>
+          <MarkdownPhrasingContent nodes={node.children} />
+        </del>
+      )
     default:
-      // 删除线、脚注、引用式链接已在解析时换成文本
+      // 脚注、引用式链接已在解析时换成文本
       return null
   }
 })
@@ -176,7 +230,7 @@ const MarkdownBlockContentOrDefinitionContent = memo(
             </blockquote>
           )
         case 'html':
-          return <Html key={index} value={node.value} />
+          return <Html key={index} value={node.value} block />
         case 'heading':
           return node.children.length === 0
             ? null
