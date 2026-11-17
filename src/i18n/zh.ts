@@ -41,6 +41,7 @@ export const zh = {
   sessionExportSave: '保存',
   sessionExportReady: '已生成 {name}，点「保存」存到本地。',
   sessionExportFailed: '导出失败，请重试',
+  staleVersionReloading: '网站刚更新，正在刷新到新版…',
   backupReminderText: '已经 {days} 天没导出 zip 了',
   backupReminderNever: '还没导出过 zip 备份',
   backupReminderGo: '去备份',

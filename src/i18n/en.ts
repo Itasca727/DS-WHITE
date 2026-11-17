@@ -44,6 +44,7 @@ export const en = {
   sessionExportSave: 'Save',
   sessionExportReady: '{name} is ready. Tap Save to keep it.',
   sessionExportFailed: 'Export failed, please retry',
+  staleVersionReloading: 'The site was just updated, reloading…',
   backupReminderText: 'No zip export for {days} days',
   backupReminderNever: 'No zip backup yet',
   backupReminderGo: 'Back up',

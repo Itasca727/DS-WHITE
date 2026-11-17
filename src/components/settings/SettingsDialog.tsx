@@ -18,6 +18,7 @@ import {
   restorePreImportBackup,
 } from '../../services/chat/backup.js'
 import { markExported } from '../../services/backupReminder.js'
+import { recoverFromStaleChunk } from '../../services/pwa.js'
 import { useChatStore } from '../../services/chat/store.js'
 import { fetchBalance, type BalanceInfo } from '../../services/api/client.js'
 import { regionCodes, getRegionName, provinces } from '../../services/location.js'
@@ -397,7 +398,11 @@ const AutoCompactSetting = () => {
       description={t('settingsAutoCompactDescription')}
       status={null}
       action={
-        <OnOffSelect label={t('settingsAutoCompact')} value={autoCompact} onChange={setAutoCompact} />
+        <OnOffSelect
+          label={t('settingsAutoCompact')}
+          value={autoCompact}
+          onChange={setAutoCompact}
+        />
       }
     />
   )
@@ -430,9 +435,7 @@ const AutoBackupSetting = () => {
           fileTarget ? 'settingsAutoBackupDescription' : 'settingsBackupReminderDescription'
         )}
         status={null}
-        action={
-          <OnOffSelect label={title} value={autoBackup} onChange={setAutoBackup} />
-        }
+        action={<OnOffSelect label={title} value={autoBackup} onChange={setAutoBackup} />}
       />
       {autoBackup ? (
         <SettingCell
@@ -566,7 +569,11 @@ const ImportConfirm = ({
             {t('cancel')}
           </Button>
           <Button variant="dangerOutlined" size="m" onClick={() => void historyImport.confirm()}>
-            {t(historyImport.skipSnapshot ? 'historyImportSkipSnapshotConfirm' : 'historyImportConfirm')}
+            {t(
+              historyImport.skipSnapshot
+                ? 'historyImportSkipSnapshotConfirm'
+                : 'historyImportConfirm'
+            )}
           </Button>
         </>
       }
@@ -637,13 +644,17 @@ const ThemeSetting = () => {
 type Status = (TranslationMessage & { error?: boolean; reason?: TranslationKey }) | null
 
 /** 导出失败附带原因：预期的错误用对应文案作原因，其他错误用错误信息。 */
-const errorStatus = (key: TranslationKey, error: unknown): Status => ({
-  key,
-  ...(error instanceof BackupError
-    ? { reason: error.key }
-    : { params: { message: error instanceof Error ? error.message : String(error) } }),
-  error: true,
-})
+const errorStatus = (key: TranslationKey, error: unknown): Status =>
+  // 网站刚更新、页面还是旧版：自动刷新，不显示一串看不懂的报错
+  recoverFromStaleChunk(error)
+    ? { key: 'staleVersionReloading' }
+    : {
+        key,
+        ...(error instanceof BackupError
+          ? { reason: error.key }
+          : { params: { message: error instanceof Error ? error.message : String(error) } }),
+        error: true,
+      }
 
 /**
  * 设置内容区左右滑动切换分组：内容跟手，滑过四分之一或快速一甩就切过去，否则弹回；
@@ -661,8 +672,13 @@ const useSectionSwipe = (
     if (!panel) {
       return
     }
-    let drag: { x: number; y: number; time: number; dx: number; horizontal: boolean | null } | null =
-      null
+    let drag: {
+      x: number
+      y: number
+      time: number
+      dx: number
+      horizontal: boolean | null
+    } | null = null
     const reset = () => {
       panel.style.transition = ''
       panel.style.transform = ''
@@ -711,14 +727,19 @@ const useSectionSwipe = (
       const velocity = Math.abs(dx) / Math.max(1, event.timeStamp - time)
       const step: 1 | -1 = dx < 0 ? 1 : -1
       const target = index + step
-      if (target >= 0 && target < sections.length && (Math.abs(dx) > width * 0.25 || velocity > 0.4)) {
+      if (
+        target >= 0 &&
+        target < sections.length &&
+        (Math.abs(dx) > width * 0.25 || velocity > 0.4)
+      ) {
         haptic()
         panel.style.transition = 'transform 140ms cubic-bezier(0.4, 0, 1, 1), opacity 140ms ease'
         panel.style.transform = `translateX(${dx < 0 ? -width * 0.35 : width * 0.35}px)`
         panel.style.opacity = '0'
         window.setTimeout(() => onSwitchRef.current(step), 130)
       } else {
-        panel.style.transition = 'transform 280ms cubic-bezier(0.22, 1, 0.36, 1), opacity 200ms ease'
+        panel.style.transition =
+          'transform 280ms cubic-bezier(0.22, 1, 0.36, 1), opacity 200ms ease'
         panel.style.transform = 'translateX(0)'
         panel.style.opacity = '1'
         window.setTimeout(reset, 300)
@@ -903,7 +924,9 @@ const BalanceSetting = () => {
             variant="outlined"
             size="m"
             className={styles.cellButton}
-            onClick={() => window.open('https://platform.deepseek.com/top_up', '_blank', 'noopener')}
+            onClick={() =>
+              window.open('https://platform.deepseek.com/top_up', '_blank', 'noopener')
+            }
           >
             {t('topUp')}
           </Button>

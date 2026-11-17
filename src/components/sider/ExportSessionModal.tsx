@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { useTranslate } from '../../i18n/index.js'
 import { exportSessionArchive, exportSessionMarkdown } from '../../services/chat/backup.js'
 import type { SessionSummary } from '../../services/chat/types.js'
+import { recoverFromStaleChunk } from '../../services/pwa.js'
 import { saveFile } from '../../utils/saveFile.js'
 import { Button } from '../base/Button.js'
 import { Modal } from '../base/Modal.js'
@@ -35,8 +36,12 @@ export const ExportSessionModal = ({
           ? await exportSessionArchive(session.id)
           : await exportSessionMarkdown(session.id, t('untitledChat'))
       setFile(new File([blob], name, { type: blob.type || 'application/octet-stream' }))
-    } catch {
-      showToast({ key: 'sessionExportFailed', type: 'error' })
+    } catch (error) {
+      showToast(
+        recoverFromStaleChunk(error)
+          ? { key: 'staleVersionReloading' }
+          : { key: 'sessionExportFailed', type: 'error' }
+      )
     } finally {
       setBusy(false)
     }
