@@ -1,8 +1,14 @@
 import clsx from 'clsx'
 import { memo, useState } from 'react'
 import { useTranslate } from '../../i18n/index.js'
-import { IconEditOutline16, IconEllipsisOutline16, IconTrashOutline16 } from '../base/icons.js'
-import { renameSession, selectSession } from '../../services/chat/store.js'
+import {
+  IconDownloadOutline16,
+  IconEditOutline16,
+  IconEllipsisOutline16,
+  IconPinOutline16,
+  IconTrashOutline16,
+} from '../base/icons.js'
+import { renameSession, selectSession, setSessionPinned } from '../../services/chat/store.js'
 import type { SessionSummary } from '../../services/chat/types.js'
 import { IconButton } from '../base/IconButton.js'
 import { Menu } from '../base/Menu.js'
@@ -12,11 +18,16 @@ import styles from './SessionItem.module.css'
 export const SessionItem = memo(function SessionItem({
   session,
   active,
+  unread,
   onDelete,
+  onExport,
 }: {
   session: SessionSummary
   active: boolean
+  /** 在后台生成完、还没点开看 */
+  unread: boolean
   onDelete: () => void
+  onExport: () => void
 }) {
   const t = useTranslate()
   const [editing, setEditing] = useState(false)
@@ -56,14 +67,27 @@ export const SessionItem = memo(function SessionItem({
       }}
     >
       <div className={styles.title}>{displayTitle}</div>
+      {unread ? <span className={styles.unread} aria-label={t('sessionUnread')} /> : null}
       <div className={styles.action} onClick={(event) => event.stopPropagation()}>
         <Menu
           options={[
+            {
+              key: 'pin',
+              label: t(session.pinned ? 'sessionUnpin' : 'sessionPin'),
+              icon: <IconPinOutline16 off={session.pinned} />,
+              onSelect: () => setSessionPinned(session.id, !session.pinned),
+            },
             {
               key: 'rename',
               label: t('sessionItemMenuRenameOption'),
               icon: <IconEditOutline16 />,
               onSelect: () => setEditing(true),
+            },
+            {
+              key: 'export',
+              label: t('sessionExport'),
+              icon: <IconDownloadOutline16 />,
+              onSelect: onExport,
             },
             {
               key: 'delete',

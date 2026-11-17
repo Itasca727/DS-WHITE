@@ -18,6 +18,7 @@ import {
   restorePreImportBackup,
 } from '../../services/chat/backup.js'
 import { useIsMobile } from '../../app/viewport.js'
+import { markExported } from '../../services/backupReminder.js'
 import { useChatStore } from '../../services/chat/store.js'
 import { fetchBalance, type BalanceInfo } from '../../services/api/client.js'
 import { regionCodes, getRegionName, provinces } from '../../services/location.js'
@@ -1098,6 +1099,7 @@ const ExportHistory = ({ disabled }: { disabled: boolean }) => {
       link.download = name
       link.click()
       setTimeout(() => URL.revokeObjectURL(url), 10_000)
+      markExported()
     } catch (error) {
       setStatus(errorStatus('historyExportFailed', error))
     } finally {

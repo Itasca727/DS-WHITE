@@ -43,6 +43,14 @@ export const useEdgeSwipe = (enabled: boolean) => {
         tracking = false
         return
       }
+      // 在输入框里拖动光标、在弹窗上滑动，都不该开合侧栏
+      if (
+        event.target instanceof Element &&
+        event.target.closest('input, textarea, [contenteditable="true"], [role="dialog"], [data-motion="fade"]')
+      ) {
+        tracking = false
+        return
+      }
       const touch = event.touches[0]
       startOpen = useMobileSider.getState().open
       if (!startOpen && touch.clientX > EDGE) {

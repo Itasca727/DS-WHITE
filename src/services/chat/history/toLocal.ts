@@ -286,6 +286,8 @@ export const toLocalSession = (file: SessionFile): LocalSession => {
     title: file.title ?? '',
     createdAt: time(file.inserted_at),
     updatedAt: time(file.updated_at),
+    // 官端置顶过的对话，导入后仍置顶
+    ...(file.pinned === true ? { pinned: true } : {}),
     ...buildTree(file),
   }
   const images = new Map<string, string>()

@@ -90,6 +90,8 @@ type ChatState = {
   sessionSaveErrors: Record<string, boolean>
   /** null 表示新对话（欢迎页） */
   activeId: string | null
+  /** 在后台生成完、还没点开看过的对话 */
+  unread: Record<string, true>
   /** 正在生成回复的会话 */
   streaming: Record<string, AbortController>
   /** 最近一次上下文组装的结果，供记忆控制台查看。 */
@@ -108,6 +110,17 @@ export type ContextDebug = {
   tokens: number
 }
 
+const UNREAD_KEY = 'chat-demo:unread'
+
+const readUnread = (): Record<string, true> => {
+  try {
+    const ids: unknown = JSON.parse(localStorage.getItem(UNREAD_KEY) ?? '[]')
+    return Array.isArray(ids) ? Object.fromEntries(ids.map((id) => [String(id), true as const])) : {}
+  } catch {
+    return {}
+  }
+}
+
 export const useChatStore = create<ChatState>(() => ({
   ready: false,
   initError: false,
@@ -117,6 +130,7 @@ export const useChatStore = create<ChatState>(() => ({
   sessionLoadErrors: {},
   sessionSaveErrors: {},
   activeId: null,
+  unread: readUnread(),
   streaming: {},
   contextDebug: {},
   compacting: {},
@@ -125,8 +139,55 @@ export const useChatStore = create<ChatState>(() => ({
 
 const { getState: get, setState: set } = useChatStore
 
+const saveUnread = (unread: Record<string, true>) => {
+  try {
+    localStorage.setItem(UNREAD_KEY, JSON.stringify(Object.keys(unread)))
+  } catch {
+    // 存储不可用时只在内存中记录
+  }
+}
+
+/** 标记 / 清除「生成完还没看」 */
+const setUnread = (id: string, value: boolean) => {
+  const current = get().unread
+  if (Boolean(current[id]) === value) {
+    return
+  }
+  const unread = { ...current }
+  if (value) {
+    unread[id] = true
+  } else {
+    delete unread[id]
+  }
+  set({ unread })
+  saveUnread(unread)
+}
+
 const sortSessions = (sessions: SessionSummary[]) =>
   [...sessions].sort((a, b) => b.updatedAt - a.updatedAt)
+
+/** 置顶 / 取消置顶：不改更新时间，取消后回到原来按时间的位置 */
+export const setSessionPinned = (id: string, pinned: boolean) => {
+  if (get().importingHistory || deletingSessions.has(id)) {
+    return
+  }
+  const apply = <T extends SessionSummary>(session: T): T => {
+    const next = { ...session, pinned: pinned || undefined }
+    if (!pinned) {
+      delete next.pinned
+    }
+    return next
+  }
+  if (getSession(id)) {
+    updateSession(id, apply)
+    persist(id)
+  } else {
+    set((state) => ({
+      sessions: state.sessions.map((session) => (session.id === id ? apply(session) : session)),
+    }))
+    void db.updateSessionMeta(id, { pinned }).catch(db.reportStorageError('pin session'))
+  }
+}
 
 const getSession = (id: string) => {
   const cache = get().sessionCache
@@ -139,7 +200,10 @@ const getStreamController = (id: string) => {
 }
 
 const sameSummary = (a: SessionSummary, b: SessionSummary) =>
-  a.title === b.title && a.createdAt === b.createdAt && a.updatedAt === b.updatedAt
+  a.title === b.title &&
+  a.createdAt === b.createdAt &&
+  a.updatedAt === b.updatedAt &&
+  !a.pinned === !b.pinned
 
 const sessionAccess = new Map<string, number>()
 const unsavedSessions = new Set<string>()
@@ -462,7 +526,10 @@ export const replaceHistory = async (write: () => Promise<void>): Promise<number
       sessionLoadErrors: {},
       sessionSaveErrors: {},
       activeId: null,
+      // 导入后整套对话换了，旧的未读标记作废
+      unread: {},
     })
+    saveUnread({})
     return summaries.length
   } finally {
     set({ importingHistory: false })
@@ -620,6 +687,7 @@ export const consumeJumpTarget = (nonce: number) => {
 
 export const selectSession = (id: string) => {
   if (!get().importingHistory && get().sessions.some((session) => session.id === id)) {
+    setUnread(id, false)
     touchSession(id)
     set({ activeId: id })
     void ensureSessionLoaded(id)
@@ -680,6 +748,7 @@ const removeSessionData = async (id: string): Promise<boolean> => {
     unsavedSessions.delete(id)
     pendingFiles.delete(id)
     clearDraft(id)
+    setUnread(id, false)
     set((state) => ({
       sessions: state.sessions.filter((session) => session.id !== id),
       sessionCache: Object.fromEntries(
@@ -1438,6 +1507,10 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
       ),
     }))
     persist(sessionId)
+    // 生成完时用户不在这个对话：侧栏亮一个小点
+    if (reply.status === 'done' && get().activeId !== sessionId) {
+      setUnread(sessionId, true)
+    }
     if (reply.status === 'done' && !request.prefix) {
       replyDoneListeners.forEach((listener) => listener())
     }

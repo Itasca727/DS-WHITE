@@ -120,7 +120,13 @@ export const saveSession = async (session: Session, files: StoredFile[] = []): P
 }
 
 /** 未打开的会话也可重命名，只读取该会话，原子更新详情和列表。 */
-export const renameSession = async (id: string, title: string): Promise<void> => {
+export const renameSession = (id: string, title: string) => updateSessionMeta(id, { title })
+
+/** 只改标题、置顶这类元数据，不动消息 */
+export const updateSessionMeta = async (
+  id: string,
+  patch: Partial<Pick<Session, 'title' | 'pinned'>>
+): Promise<void> => {
   const tx = (await getDB()).transaction(['sessions', 'sessionSummaries'], 'readwrite')
   await Promise.all([
     (async () => {
@@ -128,7 +134,10 @@ export const renameSession = async (id: string, title: string): Promise<void> =>
         const sessions = tx.objectStore('sessions')
         const session = await sessions.get(id)
         if (session) {
-          session.title = title
+          Object.assign(session, patch)
+          if (!session.pinned) {
+            delete session.pinned
+          }
           await sessions.put(session)
           await tx.objectStore('sessionSummaries').put(storedSummary(session))
         }

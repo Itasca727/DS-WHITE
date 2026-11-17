@@ -3,6 +3,7 @@ import { create } from 'zustand'
 import { exportHistory } from './chat/backup.js'
 import * as db from './chat/db.js'
 import { onReplyDone } from './chat/store.js'
+import { markExported } from './backupReminder.js'
 import { useSettings } from './settings.js'
 
 /**
@@ -130,6 +131,7 @@ const onRound = () => {
 
 /** 记下「这份备份已经存到文件」，设置页据此提示还有没有没保存的备份 */
 const markSaved = () => {
+  markExported()
   const savedAt = useAutoBackup.getState().latestAt
   if (!savedAt) {
     return

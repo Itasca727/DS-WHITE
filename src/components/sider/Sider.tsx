@@ -9,6 +9,8 @@ import {
   NewChatIcon,
 } from '../base/icons.js'
 import { openAbout } from '../about/aboutState.js'
+import { overdueDays, snoozeBackupReminder, useBackupReminder } from '../../services/backupReminder.js'
+import { ExportSessionModal } from './ExportSessionModal.js'
 import { setSiderCollapsed } from '../../services/settings.js'
 import { groupSessions } from '../../services/chat/sessionGroups.js'
 import { newChat, removeSession, useChatStore } from '../../services/chat/store.js'
@@ -30,8 +32,21 @@ export const Sider = ({ mobile = false }: { mobile?: boolean }) => {
   const t = useTranslate()
   const sessions = useChatStore((state) => state.sessions)
   const activeId = useChatStore((state) => state.activeId)
+  const unread = useChatStore((state) => state.unread)
   const [now, setNow] = useState(Date.now)
-  const groups = useMemo(() => groupSessions(sessions, now, t), [sessions, now, t])
+  const [filter, setFilter] = useState('')
+  const untitled = t('untitledChat')
+  // 按标题即时筛选；全文搜索在底部「搜索」
+  const shown = useMemo(() => {
+    const query = filter.trim().toLowerCase()
+    return query
+      ? sessions.filter((session) => (session.title || untitled).toLowerCase().includes(query))
+      : sessions
+  }, [sessions, filter, untitled])
+  const groups = useMemo(() => groupSessions(shown, now, t), [shown, now, t])
+  const reminder = useBackupReminder()
+  const overdue = sessions.length ? overdueDays(reminder, now) : null
+  const [exporting, setExporting] = useState<SessionSummary | null>(null)
   const [deleting, setDeleting] = useState<SessionSummary | null>(null)
   const [deletePending, setDeletePending] = useState(false)
   useEffect(() => {
@@ -85,8 +100,32 @@ export const Sider = ({ mobile = false }: { mobile?: boolean }) => {
         </span>
         {t('newChat')}
       </button>
+      {sessions.length > 0 ? (
+        <label className={styles.filter}>
+          <IconSearchOutline16 />
+          <input
+            type="search"
+            value={filter}
+            placeholder={t('siderFilterPlaceholder')}
+            aria-label={t('siderFilterPlaceholder')}
+            onChange={(event) => setFilter(event.target.value)}
+            onKeyDown={(event) => event.key === 'Escape' && setFilter('')}
+          />
+        </label>
+      ) : null}
       <div className={styles.listWrap}>
         <div className={styles.list}>
+          {filter.trim() && !shown.length ? (
+            <div className={styles.filterEmpty}>
+              {t('siderFilterEmpty')}
+              <button
+                type="button"
+                onClick={(event) => openHistorySearch(event.currentTarget)}
+              >
+                {t('siderFilterFullText')}
+              </button>
+            </div>
+          ) : null}
           {groups.map((group) => (
               <div key={group.key} className={styles.section}>
                 <div className={styles.sectionHeader}>{group.label}</div>
@@ -95,13 +134,43 @@ export const Sider = ({ mobile = false }: { mobile?: boolean }) => {
                     key={session.id}
                     session={session}
                     active={session.id === activeId}
+                    unread={Boolean(unread[session.id])}
                     onDelete={() => setDeleting(session)}
+                    onExport={() => setExporting(session)}
                   />
                 ))}
               </div>
             ))}
         </div>
       </div>
+      {overdue !== null ? (
+        <div className={styles.reminder} role="status">
+          <span className={styles.reminderDot} aria-hidden="true" />
+          <span className={styles.reminderText}>
+            {reminder.lastExportAt
+              ? t('backupReminderText', { days: overdue })
+              : t('backupReminderNever')}
+          </span>
+          <button
+            type="button"
+            className={styles.reminderGo}
+            onClick={() => {
+              closeMobileSider()
+              openSettings('data')
+            }}
+          >
+            {t('backupReminderGo')}
+          </button>
+          <button
+            type="button"
+            className={styles.reminderLater}
+            aria-label={t('backupReminderLater')}
+            onClick={snoozeBackupReminder}
+          >
+            ×
+          </button>
+        </div>
+      ) : null}
       <div className={styles.bottom}>
         <button
           type="button"
@@ -136,6 +205,9 @@ export const Sider = ({ mobile = false }: { mobile?: boolean }) => {
           <span className={styles.settingsLabel}>{t('siderAbout')}</span>
         </button>
       </div>
+      {exporting ? (
+        <ExportSessionModal session={exporting} onClose={() => setExporting(null)} />
+      ) : null}
       {deleting ? (
         <Modal
           title={t('deleteSessionModalContentTitle')}

@@ -51,6 +51,31 @@
   line-height: 18px;
 }
 
+/* 后台生成完、还没看：标题后一颗小光点；悬停出现「…」时让位 */
+.unread {
+  flex-shrink: 0;
+  width: 7px;
+  height: 7px;
+  margin: 0 8px 0 6px;
+  border-radius: 50%;
+  background: var(--white-accent);
+  box-shadow: 0 0 8px var(--white-accent);
+  animation: unread-in 0.4s var(--white-ease-out, ease-out) both;
+}
+
+@keyframes unread-in {
+  from {
+    opacity: 0;
+    transform: scale(0.3);
+  }
+}
+
+@media (hover: hover) {
+  .item:hover .unread {
+    display: none;
+  }
+}
+
 .action {
   display: none;
   flex-shrink: 0;

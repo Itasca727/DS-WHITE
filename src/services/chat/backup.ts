@@ -1,7 +1,8 @@
 import { formatDate } from '../../utils/format.js'
 import * as db from './db.js'
 import { replaceHistory, useChatStore } from './store.js'
-import type { Session } from './types.js'
+import { safeFileName, sessionToMarkdown } from './sessionMarkdown.js'
+import type { Session, SessionSummary } from './types.js'
 
 import { BackupError } from './history/errors.js'
 
@@ -18,9 +19,14 @@ const enqueueBackup = <T>(run: () => Promise<T>): Promise<T> => {
 
 const backupFileName = (date: Date) => `deepseek_data-${formatDate(date)}.zip`
 
-const createHistoryExport = async (): Promise<{ name: string; blob: Blob }> => {
+const createHistoryExport = async (
+  only?: string
+): Promise<{ name: string; blob: Blob }> => {
   // 列表和已加载内容保留导出开始时的快照；未打开的会话逐条读取，不填满详情缓存。
-  const { sessions, sessionCache } = useChatStore.getState()
+  const { sessionCache } = useChatStore.getState()
+  const sessions: SessionSummary[] = useChatStore
+    .getState()
+    .sessions.filter((session) => !only || session.id === only)
   async function* readSessions(): AsyncGenerator<Session> {
     for (const summary of sessions) {
       const session = Object.hasOwn(sessionCache, summary.id)
@@ -36,12 +42,37 @@ const createHistoryExport = async (): Promise<{ name: string; blob: Blob }> => {
   const { exportArchive } = await import('./history/exportArchive.js')
   const now = new Date()
   const blob = await exportArchive(readSessions())
+  if (only) {
+    const name = `deepseek_data-${safeFileName(sessions[0]?.title ?? '')}-${formatDate(now)}.zip`
+    return { name, blob }
+  }
   return { name: backupFileName(now), blob }
 }
 
 /** 导出为历史会话导出格式的 ZIP，可再次导入。 */
 export const exportHistory = (): Promise<{ name: string; blob: Blob }> =>
-  enqueueBackup(createHistoryExport)
+  enqueueBackup(() => createHistoryExport())
+
+/** 只导出一个对话的 ZIP（格式同完整导出，可导入官端或另一台设备） */
+export const exportSessionArchive = (id: string): Promise<{ name: string; blob: Blob }> =>
+  enqueueBackup(() => createHistoryExport(id))
+
+/** 一个对话导出成 Markdown，方便阅读和分享 */
+export const exportSessionMarkdown = async (
+  id: string,
+  untitled: string
+): Promise<{ name: string; blob: Blob }> => {
+  const cached = useChatStore.getState().sessionCache
+  const session = Object.hasOwn(cached, id) ? cached[id] : await db.loadSession(id)
+  if (!session) {
+    throw new Error(`Session not found: ${id}`)
+  }
+  const text = sessionToMarkdown(session, untitled)
+  return {
+    name: `${safeFileName(session.title || untitled)}-${formatDate(new Date())}.md`,
+    blob: new Blob([text], { type: 'text/markdown;charset=utf-8' }),
+  }
+}
 
 /**
  * 确认覆盖后调用：先检查 ZIP 格式与版本，校验失败时保留正在生成的回答；

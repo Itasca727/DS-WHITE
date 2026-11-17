@@ -482,6 +482,20 @@ export const IconRightUpOutline14 = () => (
   </svg>
 )
 
+/** 图钉；off 时加一道斜线，表示取消置顶 */
+export const IconPinOutline16 = ({ off = false }: { off?: boolean }) => (
+  <svg width={16} height={16} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path
+      d="M5.4 2.2h5.2M6.2 2.2v3.4L4.2 8.3v1h7.6v-1L9.8 5.6V2.2M8 9.3v4.5"
+      stroke="currentColor"
+      strokeWidth="1.3"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    {off ? <path d="m2.5 2.5 11 11" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" /> : null}
+  </svg>
+)
+
 export const IconMailOutline16 = () => (
   <svg width={16} height={16} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
     <rect x="1.15" y="2.9" width="13.7" height="10.2" rx="2.2" stroke="currentColor" strokeWidth="1.3" />
