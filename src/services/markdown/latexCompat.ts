@@ -101,6 +101,8 @@ const isDivider = (cell: string) => /^[─━—―\-=_~·•.]{4,}$/.test(visib
 /** KaTeX 表格两列之间的间距（em），和字宽的校准系数：按实际渲染量出来的 */
 const COLUMN_GAP = 1
 const WIDTH_SCALE = 1
+/** 卡片行距：对照官端截图调的 */
+const ROW_STRETCH = 1.4
 
 const RULES = /^\s*((?:\\(?:hline|toprule|midrule|bottomrule|cline\{[^{}]*\})\s*)+)/
 
@@ -145,10 +147,18 @@ const convertTabular = (spec: string, body: string) => {
       }
     }
   }
-  const tableWidth = Math.max(
-    4,
-    pieceWidths.reduce((sum, width) => sum + width, 0) + Math.max(0, pieceWidths.length - 1) * COLUMN_GAP
-  )
+  // 和官端一致：分隔线保留原来的 ━━━ 字符，表格宽度跟着它走
+  const hasHfill = extra.some((count) => count > 0)
+  if (hasHfill && columnCount === 1) {
+    return hfillCard(columns[0] ?? 'l', rows, dividerRow)
+  }
+  // 多列表格里的 \hfill：右半段拆成单独一列，分隔线不占宽度（\rlap），
+  // 再用 \kern 把第一列撑到「分隔线长度 − 右边几列」（按估算的字宽）
+  const dividerWidth = Math.max(0, ...rows.filter(dividerRow).map((row) => textWidth(row.cells[0][0])))
+  const restWidth =
+    pieceWidths.slice(1).reduce((sum, width) => sum + width, 0) +
+    Math.max(0, pieceWidths.length - 1) * COLUMN_GAP
+  const firstColumn = Math.max(0, dividerWidth - restWidth)
   const newSpec =
     leading +
     Array.from({ length: columnCount }, (_, column) => {
@@ -161,11 +171,9 @@ const convertTabular = (spec: string, body: string) => {
     if (!cells.length) {
       return rule
     }
-    if (dividerRow(row)) {
-      // 换成一条不占宽度的细线，长度和表格差不多宽，不再把第一列撑得很宽
-      const color = cells[0][0].match(/\\textcolor\s*\{([^{}]*)\}/)?.[1]
-      const line = `\\rule[0.3em]{${(tableWidth * WIDTH_SCALE).toFixed(2)}em}{0.06em}`
-      return `${rule}\\rlap{${color ? `\\textcolor{${color}}{${line}}` : line}}`
+    if (hasHfill && dividerRow(row)) {
+      const kern = firstColumn > 0 ? `\\kern{${(firstColumn * WIDTH_SCALE).toFixed(2)}em}` : ''
+      return `${rule}\\rlap{\\text{${cells[0][0].trim()}}}${kern}`
     }
     const parts: string[] = []
     for (let column = 0; column < columnCount; column++) {
@@ -178,7 +186,33 @@ const convertTabular = (spec: string, body: string) => {
     }
     return `${rule}${parts.join(' & ')}`
   })
-  return `\\text{$\\begin{array}{${newSpec}}${lines.join(' \\\\ ')}\\end{array}$}`
+  // 行距和官端（tabular 默认）一样松一些，第一行上方也就不会贴着卡片边缘
+  return `\\text{$\\def\\arraystretch{${ROW_STRETCH}}\\begin{array}{${newSpec}}${lines.join(' \\\\ ')}\\end{array}$}`
+}
+
+type CardRow = { rule: string; cells: string[][] }
+
+/**
+ * 单列卡片里的「左边名字 \hfill 右边状态」：
+ * 每行做成和最长分隔线（或这行自己左右两段加空隙）一样宽的盒子，左段贴左、右段贴右。
+ * 宽度用 \phantom 按真实字形量，不靠估算，手机换了字体也对得齐
+ */
+const hfillCard = (spec: string, rows: CardRow[], dividerRow: (row: CardRow) => boolean) => {
+  const dividers = [...new Set(rows.filter(dividerRow).map((row) => row.cells[0][0].trim()))]
+  const lines = rows.map(({ rule, cells }) => {
+    if (!cells.length) {
+      return rule
+    }
+    const pieces = (cells[0] ?? []).map((piece) => piece.trim())
+    if (pieces.length < 2) {
+      return `${rule}${pieces[0] ? `\\text{${pieces[0]}}` : ''}`
+    }
+    const left = pieces.slice(0, -1).filter(Boolean).join('\\quad ')
+    const right = pieces.at(-1) ?? ''
+    const widths = [...dividers, `${left}\\quad ${right}`].map((text) => `\\phantom{\\text{${text}}}`)
+    return `${rule}\\rlap{\\text{${left}}}\\smash{\\begin{matrix}${widths.join(' \\\\ ')}\\end{matrix}}\\llap{\\text{${right}}}`
+  })
+  return `\\text{$\\def\\arraystretch{${ROW_STRETCH}}\\begin{array}{${spec}}${lines.join(' \\\\ ')}\\end{array}$}`
 }
 
 const BEGIN_TABULAR = /\\begin\{tabular\*?\}/g
