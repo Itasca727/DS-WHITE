@@ -18,6 +18,7 @@ export const Signature = ({
   alt,
   variant = 'gradient',
   splashTarget = false,
+  glow = true,
   className,
 }: {
   width: number
@@ -27,6 +28,8 @@ export const Signature = ({
   variant?: keyof typeof SOURCES
   /** 开屏签名的接力落点 */
   splashTarget?: boolean
+  /** false：只显示签名本身，不垫光晕（侧栏） */
+  glow?: boolean
   className?: string
 }) => (
   <span
@@ -36,7 +39,7 @@ export const Signature = ({
     className={clsx(styles.signature, styles[motion], className)}
     style={{ '--sig-width': `${width}px` } as CSSProperties}
   >
-    <img className={styles.glow} src={SOURCES[variant]} alt="" draggable={false} />
+    {glow ? <img className={styles.glow} src={SOURCES[variant]} alt="" draggable={false} /> : null}
     <img className={styles.ink} src={SOURCES[variant]} alt="" draggable={false} />
   </span>
 )
