@@ -166,13 +166,13 @@ export const normalizeMarkdown = (input: string): string => {
         while (content.length && !content[0].trim()) {
           content = content.slice(1)
         }
-        while (content.length && !content.at(-1)!.trim()) {
+        while (content.length && !(content.at(-1) ?? '').trim()) {
           content = content.slice(0, -1)
         }
         if (
           content.length >= 2 &&
-          ((content[0].trim() === '$$' && content.at(-1)!.trim() === '$$') ||
-            (content[0].trim() === '\\[' && content.at(-1)!.trim() === '\\]'))
+          ((content[0].trim() === '$$' && (content.at(-1) ?? '').trim() === '$$') ||
+            (content[0].trim() === '\\[' && (content.at(-1) ?? '').trim() === '\\]'))
         ) {
           content = content.slice(1, -1)
         }
