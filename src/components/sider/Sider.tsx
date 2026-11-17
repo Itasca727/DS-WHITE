@@ -34,16 +34,7 @@ export const Sider = ({ mobile = false }: { mobile?: boolean }) => {
   const activeId = useChatStore((state) => state.activeId)
   const unread = useChatStore((state) => state.unread)
   const [now, setNow] = useState(Date.now)
-  const [filter, setFilter] = useState('')
-  const untitled = t('untitledChat')
-  // 按标题即时筛选；全文搜索在底部「搜索」
-  const shown = useMemo(() => {
-    const query = filter.trim().toLowerCase()
-    return query
-      ? sessions.filter((session) => (session.title || untitled).toLowerCase().includes(query))
-      : sessions
-  }, [sessions, filter, untitled])
-  const groups = useMemo(() => groupSessions(shown, now, t), [shown, now, t])
+  const groups = useMemo(() => groupSessions(sessions, now, t), [sessions, now, t])
   const reminder = useBackupReminder()
   const overdue = sessions.length ? overdueDays(reminder, now) : null
   const [exporting, setExporting] = useState<SessionSummary | null>(null)
@@ -100,32 +91,8 @@ export const Sider = ({ mobile = false }: { mobile?: boolean }) => {
         </span>
         {t('newChat')}
       </button>
-      {sessions.length > 0 ? (
-        <label className={styles.filter}>
-          <IconSearchOutline16 />
-          <input
-            type="search"
-            value={filter}
-            placeholder={t('siderFilterPlaceholder')}
-            aria-label={t('siderFilterPlaceholder')}
-            onChange={(event) => setFilter(event.target.value)}
-            onKeyDown={(event) => event.key === 'Escape' && setFilter('')}
-          />
-        </label>
-      ) : null}
       <div className={styles.listWrap}>
         <div className={styles.list}>
-          {filter.trim() && !shown.length ? (
-            <div className={styles.filterEmpty}>
-              {t('siderFilterEmpty')}
-              <button
-                type="button"
-                onClick={(event) => openHistorySearch(event.currentTarget)}
-              >
-                {t('siderFilterFullText')}
-              </button>
-            </div>
-          ) : null}
           {groups.map((group) => (
               <div key={group.key} className={styles.section}>
                 <div className={styles.sectionHeader}>{group.label}</div>

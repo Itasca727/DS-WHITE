@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { IconEditOutline16 } from '../base/icons.js'
 import { useSettings } from '../../services/settings.js'
 import { useIsMobile } from '../../app/viewport.js'
+import { Button } from '../base/Button.js'
 import { IconButton } from '../base/IconButton.js'
 import { useApiKeyForm } from './useApiKeyForm.js'
 import { useTranslate } from '../../i18n/index.js'
@@ -60,41 +61,37 @@ export const ApiKeyField = ({ editor }: { editor: ApiKeyEditor }) => {
                 }
               }}
             />
-            {!isMobile && form.value.trim() ? (
-              <>
-                <span className={styles.divider} />
-                <button
-                  type="button"
-                  className={styles.confirm}
-                  disabled={form.verifying}
-                  // 保持输入框焦点
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => void form.submit()}
-                >
-                  {form.verifying ? t('apiKeyVerifying') : t('confirm')}
-                </button>
-              </>
-            ) : null}
           </div>
         )}
         {showInput && form.error ? <div className={styles.error}>{form.error}</div> : null}
+        {showInput ? (
+          // 输入框正下方固定一个「确认」，没输入时置灰；修改已保存的 Key 时可取消
+          <div className={styles.apiKeyActions}>
+            {apiKey ? (
+              <Button
+                variant="outlined"
+                disabled={form.verifying}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => {
+                  form.setValue('')
+                  setEditing(false)
+                }}
+              >
+                {t('cancel')}
+              </Button>
+            ) : null}
+            <Button
+              className={styles.apiKeyConfirm}
+              disabled={!form.value.trim() || form.verifying}
+              // 保持输入框焦点，手机上键盘不会先收起把按钮挪走
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => void form.submit()}
+            >
+              {form.verifying ? t('apiKeyVerifying') : t('confirm')}
+            </Button>
+          </div>
+        ) : null}
       </div>
     </div>
   )
-}
-
-/** 移动端：输入 API Key 时在选项下方显示整行「确定」 */
-export const ApiKeyConfirm = ({ editor: { showInput, form } }: { editor: ApiKeyEditor }) => {
-  const t = useTranslate()
-  return showInput && form.value.trim() ? (
-    <button
-      type="button"
-      className={styles.mobileConfirm}
-      disabled={form.verifying}
-      onMouseDown={(event) => event.preventDefault()}
-      onClick={() => void form.submit()}
-    >
-      {form.verifying ? t('apiKeyVerifying') : t('confirm')}
-    </button>
-  ) : null
 }

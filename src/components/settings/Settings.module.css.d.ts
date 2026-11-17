@@ -41,5 +41,7 @@ declare const styles: {
   readonly "creditDark": string;
   readonly "creditLight": string;
   readonly "copyright": string;
+  readonly "apiKeyActions": string;
+  readonly "apiKeyConfirm": string;
 };
 export = styles;

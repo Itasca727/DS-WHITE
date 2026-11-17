@@ -17,7 +17,6 @@ import {
   importHistory,
   restorePreImportBackup,
 } from '../../services/chat/backup.js'
-import { useIsMobile } from '../../app/viewport.js'
 import { markExported } from '../../services/backupReminder.js'
 import { useChatStore } from '../../services/chat/store.js'
 import { fetchBalance, type BalanceInfo } from '../../services/api/client.js'
@@ -41,7 +40,7 @@ import { Button } from '../base/Button.js'
 import { Modal } from '../base/Modal.js'
 import { Select } from '../base/Select.js'
 import { showToast } from '../base/toastState.js'
-import { ApiKeyConfirm, ApiKeyField, useApiKeyEditor } from './ApiKeyField.js'
+import { ApiKeyField, useApiKeyEditor } from './ApiKeyField.js'
 import { closeSettings, useSettingsDialog, type SettingsSection } from './settingsDialogState.js'
 import styles from './Settings.module.css'
 import { playSendSound } from '../../utils/sound.js'
@@ -73,7 +72,6 @@ const sections: { value: SettingsSection; label: TranslationKey; icon: ReactNode
 
 const SettingsContent = () => {
   const t = useTranslate()
-  const isMobile = useIsMobile()
   // 打开时按调用方指定的分组选中，之后在弹窗内切换
   const [section, setSectionState] = useState(() => useSettingsDialog.getState().section)
   // 切换方向：决定新内容从哪边滑进来（点导航和左右滑动都一样）
@@ -171,7 +169,6 @@ const SettingsContent = () => {
                   </Button>
                 }
               />
-              {isMobile ? <ApiKeyConfirm editor={apiKeyEditor} /> : null}
             </>
           )}
         </div>

@@ -516,3 +516,18 @@
     color: var(--dsw-alias-label-caption);
   }
 }
+
+/* API Key 输入框下方的「取消 / 确认」 */
+.apiKeyActions {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+
+  > button {
+    flex: 1;
+  }
+}
+
+.apiKeyConfirm {
+  flex: 2 !important;
+}

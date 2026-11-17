@@ -17,8 +17,6 @@ declare const styles: {
   readonly "drawer": string;
   readonly "drawerMask": string;
   readonly "mobile": string;
-  readonly "filter": string;
-  readonly "filterEmpty": string;
   readonly "reminder": string;
   readonly "reminderDot": string;
   readonly "reminderText": string;

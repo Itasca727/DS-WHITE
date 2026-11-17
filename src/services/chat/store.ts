@@ -153,12 +153,9 @@ const setUnread = (id: string, value: boolean) => {
   if (Boolean(current[id]) === value) {
     return
   }
-  const unread = { ...current }
-  if (value) {
-    unread[id] = true
-  } else {
-    delete unread[id]
-  }
+  const unread: Record<string, true> = value
+    ? { ...current, [id]: true }
+    : Object.fromEntries(Object.entries(current).filter(([key]) => key !== id))
   set({ unread })
   saveUnread(unread)
 }
