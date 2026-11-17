@@ -150,7 +150,9 @@ const fixEmphasis = (value: string): PhrasingContent[] => {
 
 /** 去掉 \text{…} 等本来就放文字的命令后，公式里还有中文：多半是 $5 到 $10 这种金额被误认成公式 */
 const TEXT_COMMANDS = /\\(?:text\w*|mbox|mathrm|operatorname|ce|pu)\s*\{[^{}]*\}/g
-const looksLikeProse = (value: string) => CJK.test(value.replace(TEXT_COMMANDS, ''))
+const looksLikeProse = (value: string) =>
+  // 有 \\命令 的一定是公式（如 $\\colorbox{…}{中文}$），只有纯文字加中文的才可能是金额
+  !/\\[A-Za-z]/.test(value) && CJK.test(value.replace(TEXT_COMMANDS, ''))
 
 const text = (value: string): Text => ({ type: 'text', value })
 
@@ -249,7 +251,9 @@ const spanOf = (nodes: PhrasingContent[]) => {
 const splitDisplayMath = (node: Paragraph, raw: (node: Nodes) => string): Nodes[] => {
   node.children = pairHtmlTags(node.children)
   const isDisplay = (child: PhrasingContent): child is InlineMath =>
-    child.type === 'inlineMath' && /^(\$\$|\\\[)/.test(raw(child))
+    child.type === 'inlineMath' &&
+    // $$…$$、\[…\]，以及用单个 $ 包着的 LaTeX 卡片
+    (/^(\$\$|\\\[)/.test(raw(child)) || /\\(?:colorbox|fcolorbox|fbox)\b|\\begin\{tabular/.test(child.value))
   if (!node.children.some(isDisplay)) {
     return [node]
   }

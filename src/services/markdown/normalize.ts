@@ -6,6 +6,8 @@
  * - `$$ 第一行` …… `最后一行 $$` 这种首尾和内容写在同一行的公式块，把 $$ 拆到单独一行
  * - 没有包在 $$ 里的 \begin{aligned} …… \end{aligned} 等公式环境，补上 $$
  * - 表格行里行内公式中的 |（如 $|x|$）换成 \vert，不再把表格切坏
+ * - 模型用 LaTeX 画的卡片（\colorbox、\fbox、tabular…）没包 $$、或者包在 ```latex 代码块里时，按公式块显示
+ * - 去掉零宽字符（BOM 等），它们夹在 $$ 前面会让公式块认不出来
  */
 
 const FENCE = /^\s*(`{3,}|~{3,})/
@@ -36,9 +38,43 @@ const MATH_ENVS = new Set([
   'multline*',
   'eqnarray',
   'eqnarray*',
+  // KaTeX 不认 tabular，渲染前会转换成 array
+  'tabular',
 ])
 
 const BEGIN = /^\\begin\{([A-Za-z]+\*?)\}/
+
+/** 行首是这些命令：模型在画 LaTeX 卡片 */
+const CARD_START = /^\\(?:colorbox|fcolorbox|fbox|framebox|boxed)\s*\{/
+
+/** ```latex 代码块里是卡片（而不是一份完整的 LaTeX 文档）时，直接渲染 */
+const isLatexCard = (content: string) =>
+  /\\(?:colorbox|fcolorbox|fbox|textcolor)\b|\\begin\{tabular\}/.test(content) &&
+  !/\\(?:documentclass|usepackage)\b|\\begin\{document\}/.test(content)
+
+const ZERO_WIDTH = /\uFEFF|\u200B|\u200C|\u200D|\u2060/g
+
+/** 从 start 行开始，花括号配平到哪一行结束；没写完（流式中）返回 -1 */
+const findBalanced = (lines: string[], start: number) => {
+  let depth = 0
+  for (let i = start; i < lines.length && i < start + 400; i++) {
+    const line = lines[i]
+    for (let j = 0; j < line.length; j++) {
+      const char = line[j]
+      if (char === '\\') {
+        j++
+      } else if (char === '{') {
+        depth++
+      } else if (char === '}') {
+        depth--
+      }
+    }
+    if (depth <= 0) {
+      return i
+    }
+  }
+  return -1
+}
 
 /** 表格行里的行内公式：不以空格开头结尾，避免把 `$5 | $10` 这种金额误当公式 */
 const INLINE_MATH_IN_ROW = /\$(?!\s)([^$\n]*?[^\s$])\$/g
@@ -70,7 +106,8 @@ const findEnd = (lines: string[], start: number, name: string) => {
 }
 
 export const normalizeMarkdown = (input: string): string => {
-  if (!input.includes('$') && !input.includes('\\begin') && !input.includes('\\[')) {
+  input = input.replace(ZERO_WIDTH, '')
+  if (!input.includes('$') && !input.includes('\\')) {
     return input
   }
   const lines = input.split('\n')
@@ -78,6 +115,8 @@ export const normalizeMarkdown = (input: string): string => {
   let fence: string | null = null
   /** 当前所在公式块的写法 */
   let math: '$$' | '\\[' | null = null
+  /** 当前段落里有没写完的单个 $ 行内公式（跨行的 $…$），里面不再补 $$ */
+  let inlineOpen = false
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]
@@ -93,6 +132,23 @@ export const normalizeMarkdown = (input: string): string => {
     }
     const fenceMatch = line.match(FENCE)
     if (fenceMatch && !math) {
+      // ```math 代码块，或画卡片的 ```latex 代码块：写完后按公式块显示
+      const lang = trimmed.slice(fenceMatch[1].length).trim().toLowerCase()
+      if (['math', 'latex', 'tex', 'katex'].includes(lang)) {
+        let close = -1
+        for (let j = i + 1; j < lines.length; j++) {
+          if (lines[j].trim().startsWith(fenceMatch[1])) {
+            close = j
+            break
+          }
+        }
+        const content = lines.slice(i + 1, close)
+        if (close !== -1 && (lang === 'math' || lang === 'katex' || isLatexCard(content.join('\n')))) {
+          out.push(`${indent}$$`, ...content, `${indent}$$`)
+          i = close
+          continue
+        }
+      }
       fence = fenceMatch[1]
       out.push(line)
       continue
@@ -145,8 +201,21 @@ export const normalizeMarkdown = (input: string): string => {
       continue
     }
 
+    if (!trimmed) {
+      inlineOpen = false
+    }
+
+    if (!inlineOpen && CARD_START.test(trimmed)) {
+      const end = findBalanced(lines, i)
+      if (end !== -1) {
+        out.push(`${indent}$$`, ...lines.slice(i, end + 1), `${indent}$$`)
+        i = end
+        continue
+      }
+    }
+
     const env = trimmed.match(BEGIN)?.[1]
-    if (env && MATH_ENVS.has(env)) {
+    if (env && MATH_ENVS.has(env) && !inlineOpen) {
       const end = findEnd(lines, i, env)
       if (end !== -1) {
         out.push(`${indent}$$`, ...lines.slice(i, end + 1), `${indent}$$`)
@@ -155,6 +224,11 @@ export const normalizeMarkdown = (input: string): string => {
       }
     }
 
+    // 数一数这行里单独的 $（不算 $$ 和 \$），奇数个说明行内公式跨到了下一行
+    const singles = line.replace(/\\\$|\$\$/g, '').split('$').length - 1
+    if (singles % 2 === 1) {
+      inlineOpen = !inlineOpen
+    }
     out.push(trimmed.startsWith('|') ? fixTableRow(line) : line)
   }
   return out.join('\n')

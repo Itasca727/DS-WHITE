@@ -96,6 +96,10 @@ const textWidth = (cell: string) =>
 /** 只由横线字符组成的格子：模型拿来画分隔线 */
 const isDivider = (cell: string) => /^[─━—―\-=_~·•.]{4,}$/.test(visibleText(cell).replace(/\s/g, ''))
 
+/** KaTeX 表格两列之间的间距（em），和字宽的校准系数：按实际渲染量出来的 */
+const COLUMN_GAP = 1
+const WIDTH_SCALE = 1
+
 const RULES = /^\s*((?:\\(?:hline|toprule|midrule|bottomrule|cline\{[^{}]*\})\s*)+)/
 
 const convertTabular = (spec: string, body: string) => {
@@ -118,21 +122,30 @@ const convertTabular = (spec: string, body: string) => {
   const columnCount = Math.max(columns.length, ...rows.map((row) => row.cells.length))
   const dividerRow = (row: (typeof rows)[number]) =>
     row.cells.length === 1 && row.cells[0].length === 1 && isDivider(row.cells[0][0])
-  // 分隔线跟着表格宽度走：按其它行的文字估算整行宽度
-  const tableWidth = Math.max(
-    4,
-    ...rows
-      .filter((row) => !dividerRow(row))
-      .map((row) =>
-        row.cells.reduce(
-          (sum, pieces) => sum + pieces.reduce((width, piece) => width + textWidth(piece), 0) + (pieces.length - 1) * 2,
-          0
-        ) + (row.cells.length - 1) * 0.8
-      )
-  )
   // 每个原始列因为 \hfill 多出来几列
   const extra = Array.from({ length: columnCount }, (_, column) =>
     Math.max(0, ...rows.map((row) => (row.cells[column]?.length ?? 1) - 1))
+  )
+  // 分隔线跟着表格宽度走：每一列取最宽的格子，加起来再加列间距
+  const pieceWidths: number[] = []
+  for (const row of rows) {
+    if (dividerRow(row)) {
+      continue
+    }
+    let index = 0
+    for (let column = 0; column < columnCount; column++) {
+      const pieces = row.cells[column] ?? ['']
+      for (let piece = 0; piece <= extra[column]; piece++) {
+        // \hfill 拆出来的右半段前面有一个 \quad
+        const width = textWidth(pieces[piece] ?? '') + (piece > 0 && pieces[piece] ? 1 : 0)
+        pieceWidths[index] = Math.max(pieceWidths[index] ?? 0, width)
+        index++
+      }
+    }
+  }
+  const tableWidth = Math.max(
+    4,
+    pieceWidths.reduce((sum, width) => sum + width, 0) + Math.max(0, pieceWidths.length - 1) * COLUMN_GAP
   )
   const newSpec =
     leading +
@@ -149,8 +162,7 @@ const convertTabular = (spec: string, body: string) => {
     if (dividerRow(row)) {
       // 换成一条不占宽度的细线，长度和表格差不多宽，不再把第一列撑得很宽
       const color = cells[0][0].match(/\\textcolor\s*\{([^{}]*)\}/)?.[1]
-      // 估算偏窄（字体回退、列间距），按实测放大一些；宁短勿长，避免伸出卡片
-      const line = `\\rule[0.3em]{${(tableWidth * 1.2).toFixed(1)}em}{0.06em}`
+      const line = `\\rule[0.3em]{${(tableWidth * WIDTH_SCALE).toFixed(2)}em}{0.06em}`
       return `${rule}\\rlap{${color ? `\\textcolor{${color}}{${line}}` : line}}`
     }
     const parts: string[] = []
