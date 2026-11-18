@@ -56,8 +56,6 @@
 
 .item {
   position: relative;
-  /* 长按用来进入多选：不弹系统的拷贝 / 预览菜单 */
-  -webkit-touch-callout: none;
   /* 独立格式化上下文：子元素外边距不穿透，测量高度与开启 content-visibility 后一致 */
   display: flow-root;
 }
