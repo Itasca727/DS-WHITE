@@ -40,7 +40,10 @@ export const ContextPanel = ({ session, onClose }: { session: Session; onClose: 
   useExitGhost(maskRef)
   useExitGhost(panelRef)
   // 和搜索页一样：从左边缘右滑返回
-  useEdgeSwipeBack(panelRef, true, () => {}, onClose)
+  useEdgeSwipeBack(panelRef, true, () => {}, () => {
+    panelRef.current?.setAttribute('data-no-exit', '')
+    onClose()
+  })
   const rounds = useMemo(() => getContextRounds(getVisibleMessages(session)), [session])
   const excluded = useMemo(() => new Set(session.contextExcluded ?? []), [session.contextExcluded])
   const compress = session.contextCompress ?? 0

@@ -173,13 +173,30 @@ const PeekBox = ({ active, children }: { active: boolean; children: ReactNode })
     stickRef.current = true
     // 自己写的 scrollTop 也会触发 scroll 事件，记下来区分，免得把「跟随」误关掉
     let written = -1
+    // 新的一行出来时不直接跳过去，而是每帧追一段，平滑地往上滚（同官端）
+    let frame = 0
+    const step = () => {
+      frame = 0
+      if (!stickRef.current) {
+        return
+      }
+      const target = box.scrollHeight - box.clientHeight
+      const gap = target - box.scrollTop
+      if (gap <= 0.5) {
+        return
+      }
+      box.scrollTop = gap < 1.5 ? target : box.scrollTop + Math.max(1, gap * 0.22)
+      written = box.scrollTop
+      frame = requestAnimationFrame(step)
+    }
     const stick = () => {
-      if (stickRef.current) {
-        box.scrollTop = box.scrollHeight
-        written = box.scrollTop
+      if (stickRef.current && !frame) {
+        frame = requestAnimationFrame(step)
       }
     }
-    stick()
+    // 刚出现时直接贴到底，之后再平滑跟随
+    box.scrollTop = box.scrollHeight
+    written = box.scrollTop
     const observer = new ResizeObserver(stick)
     observer.observe(inner)
     const onScroll = () => {
@@ -190,6 +207,7 @@ const PeekBox = ({ active, children }: { active: boolean; children: ReactNode })
     }
     box.addEventListener('scroll', onScroll, { passive: true })
     return () => {
+      cancelAnimationFrame(frame)
       observer.disconnect()
       box.removeEventListener('scroll', onScroll)
     }

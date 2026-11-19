@@ -1,6 +1,6 @@
 /* WHITE PWA shell cache. API requests are never cached; only same-origin app assets. */
 const PREFIX = 'white-pwa-'
-const CACHE = PREFIX + 'v71'
+const CACHE = PREFIX + 'v73'
 const SHELL = [
   './',
   './index.html',

@@ -11,6 +11,10 @@ const EXIT_MS = 240
 const scrollOf = new WeakMap<Element, number>()
 
 const ghost = (el: HTMLElement, parent: Node | null, next: Node | null) => {
+  // 已经用手势滑出屏幕的（右滑返回）：不再原地播一遍退场动画，否则会闪一下
+  if (el.hasAttribute('data-no-exit')) {
+    return
+  }
   const target = el.isConnected ? el.parentNode : parent
   if (!target || !(target as Node).isConnected) {
     return
