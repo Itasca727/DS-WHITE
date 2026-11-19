@@ -127,7 +127,8 @@ export const MathBlock = memo(function MathBlock({ value }: { value: string }) {
     renderMode === 'katex' && !(wrap && card) ? html : '',
     card ? onTooWide : undefined
   )
-  if (wrap && card) {
+  // KaTeX 认不出（卡片里有 # ^ 这类符号）但网页版能画：直接用网页版，不再显示源码
+  if (card && (wrap || renderMode === 'fallback')) {
     return <div className="ds-markdown-math ds-tex-wrap" dangerouslySetInnerHTML={{ __html: card }}></div>
   }
   if (renderMode === 'fallback') {

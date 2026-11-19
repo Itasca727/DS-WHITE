@@ -327,6 +327,14 @@ const convert = (source: string, renderMath: RenderMath, text: boolean): string 
       i = end + 1
       continue
     }
+    if (char === '`') {
+      // 模型把 Markdown 的行内代码写进了卡片：反引号本身不显示
+      i++
+      continue
+    }
+    if (char === '#' && !text) {
+      fail()
+    }
     if (char === '~') {
       out += ' '
       i++
@@ -481,6 +489,8 @@ export const textCardHtml = (input: string, renderMath: RenderMath): string | nu
     let source = unwrap(input, frame)
     let columns: string[] = []
     let separatorCells = true
+    // tabular 的格子是文字模式：^ # 这类符号原样显示；array 的格子是数学模式
+    let textCells = false
     const env = ENVIRONMENT.exec(source)
     if (env) {
       const name = env[1]
@@ -489,6 +499,7 @@ export const textCardHtml = (input: string, renderMath: RenderMath): string | nu
         return null
       }
       let cursor = env[0].length
+      textCells = name.startsWith('tabular')
       if (name.startsWith('tabular') || name === 'array') {
         if (name === 'tabular*') {
           cursor = readArg(source, cursor)[1]
@@ -540,9 +551,9 @@ export const textCardHtml = (input: string, renderMath: RenderMath): string | nu
         const html =
           pieces.length > 1
             ? `<span class="ds-tex-split">${pieces
-                .map((piece) => `<span>${convert(piece, renderMath, false)}</span>`)
+                .map((piece) => `<span>${convert(piece, renderMath, textCells)}</span>`)
                 .join('')}</span>`
-            : convert(pieces[0], renderMath, false).trim()
+            : convert(pieces[0], renderMath, textCells).trim()
         return `<td${span} style="text-align:${align}">${html}</td>`
       })
       return `<tr class="${ruleClass.trim()}">${tds.join('')}</tr>`

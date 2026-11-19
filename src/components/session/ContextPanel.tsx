@@ -16,6 +16,7 @@ import { setAutoCompact, useSettings } from '../../services/settings.js'
 import { Button } from '../base/Button.js'
 import { Modal } from '../base/Modal.js'
 import styles from './ContextPanel.module.css'
+import { useEdgeSwipeBack } from '../historySearch/useEdgeSwipeBack.js'
 
 const preview = (text: string, fallback: string) => {
   const line = (text || '').replace(/\s+/g, ' ').trim()
@@ -38,6 +39,8 @@ export const ContextPanel = ({ session, onClose }: { session: Session; onClose: 
   const listRef = useRef<HTMLDivElement>(null)
   useExitGhost(maskRef)
   useExitGhost(panelRef)
+  // 和搜索页一样：从左边缘右滑返回
+  useEdgeSwipeBack(panelRef, true, () => {}, onClose)
   const rounds = useMemo(() => getContextRounds(getVisibleMessages(session)), [session])
   const excluded = useMemo(() => new Set(session.contextExcluded ?? []), [session.contextExcluded])
   const compress = session.contextCompress ?? 0

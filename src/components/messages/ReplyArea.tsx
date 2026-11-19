@@ -1,7 +1,7 @@
 import { useTranslate } from '../../i18n/index.js'
 import clsx from 'clsx'
 import { Collapse } from '../base/Collapse.js'
-import { memo, useEffect, useRef, useState, type ReactNode } from 'react'
+import { memo, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import {
   IconBrowseOutline16,
   IconBrowseWarningOutline16,
@@ -70,16 +70,35 @@ export const ReplyArea = memo(function ReplyArea({
   // 开启自动折叠时，已经有正文的历史消息默认收起
   const [open, setOpen] = useState(() => !(autoCollapse && hasResponse))
   const [userToggled, setUserToggled] = useState(false)
+  // 未记录请求开关时，按是否有思考内容显示标题。
+  const thinking = message.thinking ?? view.steps.some((step) => step.type === 'thinking')
+  const titleActive = streaming && !hasResponse
+  // 思考进行中：内容放进固定高度的小窗里滚动（和官端一样），页面不会被越拉越长
+  const [peek, setPeek] = useState(() => titleActive && thinking)
+  useEffect(() => {
+    if (titleActive && thinking && !userToggled) {
+      setPeek(true)
+    }
+  }, [titleActive, thinking, userToggled])
+  useEffect(() => {
+    if (!streaming) {
+      setPeek(false)
+    }
+  }, [streaming])
   // 只在正文开始输出的那一刻自动收起（hasResponse 由 false 变 true）；
-  // 中途切换设置不会把已经展开的历史思考一并收起，用户手动展开过也不再干预
+  // 中途切换设置不会把已经展开的历史思考一并收起，用户手动展开过也不再干预。
+  // 收起时保持小窗高度，从小窗收成标题；不收起就把小窗展开成完整的思考过程
   const prevHasResponse = useRef(hasResponse)
   useEffect(() => {
-    if (!prevHasResponse.current && hasResponse && autoCollapse && !userToggled) {
-      setOpen(false)
+    if (!prevHasResponse.current && hasResponse) {
+      if (autoCollapse && !userToggled) {
+        setOpen(false)
+      } else {
+        setPeek(false)
+      }
     }
     prevHasResponse.current = hasResponse
   }, [autoCollapse, hasResponse, userToggled])
-  const titleActive = streaming && !hasResponse
   // 挂载后才开始播放展开 / 收起动画：打开历史会话时直接显示最终状态
   const [motionReady, setMotionReady] = useState(false)
   useEffect(() => setMotionReady(true), [])
@@ -87,8 +106,6 @@ export const ReplyArea = memo(function ReplyArea({
   if (view.steps.length === 0 && !(message.thinking && streaming)) {
     return null
   }
-  // 未记录请求开关时，按是否有思考内容显示标题。
-  const thinking = message.thinking ?? view.steps.some((step) => step.type === 'thinking')
   const title = thinking ? getAreaTitle(view, streaming, Date.now(), hasResponse) : null
   const stopped = !streaming && !hasResponse
   return (
@@ -98,6 +115,7 @@ export const ReplyArea = memo(function ReplyArea({
           className={styles.title}
           onClick={() => {
             setUserToggled(true)
+            setPeek(false)
             setOpen((value) => !value)
           }}
         >
@@ -121,20 +139,67 @@ export const ReplyArea = memo(function ReplyArea({
         animate={motionReady}
         className={styles.collapse}
       >
-        {view.steps.map((step, index) => (
-          <StepItem
-            key={stepKey(step, index)}
-            step={step}
-            message={message}
-            sources={view.sources}
-            streaming={streaming}
-            isLast={index === view.steps.length - 1}
-          />
-        ))}
+        <PeekBox active={peek && !!title}>
+          {view.steps.map((step, index) => (
+            <StepItem
+              key={stepKey(step, index)}
+              step={step}
+              message={message}
+              sources={view.sources}
+              streaming={streaming}
+              isLast={index === view.steps.length - 1}
+            />
+          ))}
+        </PeekBox>
       </Collapse>
     </div>
   )
 })
+
+/**
+ * 思考中的小窗：固定高度，上下边缘淡出，新内容出来时自动滚到最底下；
+ * 手指在小窗里往上翻就停止跟随，翻回底部再继续。
+ */
+const PeekBox = ({ active, children }: { active: boolean; children: ReactNode }) => {
+  const boxRef = useRef<HTMLDivElement>(null)
+  const innerRef = useRef<HTMLDivElement>(null)
+  const stickRef = useRef(true)
+  useLayoutEffect(() => {
+    const box = boxRef.current
+    const inner = innerRef.current
+    if (!active || !box || !inner) {
+      return
+    }
+    stickRef.current = true
+    // 自己写的 scrollTop 也会触发 scroll 事件，记下来区分，免得把「跟随」误关掉
+    let written = -1
+    const stick = () => {
+      if (stickRef.current) {
+        box.scrollTop = box.scrollHeight
+        written = box.scrollTop
+      }
+    }
+    stick()
+    const observer = new ResizeObserver(stick)
+    observer.observe(inner)
+    const onScroll = () => {
+      if (Math.abs(box.scrollTop - written) < 1) {
+        return
+      }
+      stickRef.current = box.scrollHeight - box.scrollTop - box.clientHeight < 12
+    }
+    box.addEventListener('scroll', onScroll, { passive: true })
+    return () => {
+      observer.disconnect()
+      box.removeEventListener('scroll', onScroll)
+    }
+  }, [active])
+  return (
+    <div ref={boxRef} className={clsx(active && styles.peek)}>
+      <div ref={innerRef}>{children}</div>
+    </div>
+  )
+}
 
 const stepKey = (step: Step, index: number) =>
   step.type === 'thinking' || step.type === 'text' || step.type === 'search'
