@@ -157,64 +157,42 @@ export const ReplyArea = memo(function ReplyArea({
 })
 
 /**
- * 思考中的小窗：固定高度，上下边缘淡出，新内容出来时自动滚到最底下；
- * 手指在小窗里往上翻就停止跟随，翻回底部再继续。
+ * 思考中的小窗：固定高度，上下边缘淡出，新内容出来时整体往上推，始终露出最新几行。
+ * 用 transform + CSS 过渡来滚：动画在合成层上跑，手机一边收字一边排版时主线程再忙也不会一顿一顿。
+ * 想看完整内容点标题展开即可。
  */
 const PeekBox = ({ active, children }: { active: boolean; children: ReactNode }) => {
   const boxRef = useRef<HTMLDivElement>(null)
   const innerRef = useRef<HTMLDivElement>(null)
-  const stickRef = useRef(true)
   useLayoutEffect(() => {
     const box = boxRef.current
     const inner = innerRef.current
     if (!active || !box || !inner) {
       return
     }
-    stickRef.current = true
-    // 自己写的 scrollTop 也会触发 scroll 事件，记下来区分，免得把「跟随」误关掉
-    let written = -1
-    // 新的一行出来时不直接跳过去，而是每帧追一段，平滑地往上滚（同官端）
-    let frame = 0
-    const step = () => {
-      frame = 0
-      if (!stickRef.current) {
-        return
-      }
-      const target = box.scrollHeight - box.clientHeight
-      const gap = target - box.scrollTop
-      if (gap <= 0.5) {
-        return
-      }
-      box.scrollTop = gap < 1.5 ? target : box.scrollTop + Math.max(1, gap * 0.22)
-      written = box.scrollTop
-      frame = requestAnimationFrame(step)
+    let first = true
+    const update = () => {
+      const offset = Math.max(0, inner.offsetHeight - box.clientHeight)
+      // 第一次直接到位，之后每次长高都平滑推上去
+      inner.style.transition = first ? 'none' : ''
+      inner.style.transform = offset ? `translate3d(0, ${-offset}px, 0)` : ''
+      first = false
     }
-    const stick = () => {
-      if (stickRef.current && !frame) {
-        frame = requestAnimationFrame(step)
-      }
-    }
-    // 刚出现时直接贴到底，之后再平滑跟随
-    box.scrollTop = box.scrollHeight
-    written = box.scrollTop
-    const observer = new ResizeObserver(stick)
+    update()
+    const observer = new ResizeObserver(update)
     observer.observe(inner)
-    const onScroll = () => {
-      if (Math.abs(box.scrollTop - written) < 1) {
-        return
-      }
-      stickRef.current = box.scrollHeight - box.scrollTop - box.clientHeight < 12
-    }
-    box.addEventListener('scroll', onScroll, { passive: true })
+    observer.observe(box)
     return () => {
-      cancelAnimationFrame(frame)
       observer.disconnect()
-      box.removeEventListener('scroll', onScroll)
+      inner.style.transition = ''
+      inner.style.transform = ''
     }
   }, [active])
   return (
     <div ref={boxRef} className={clsx(active && styles.peek)}>
-      <div ref={innerRef}>{children}</div>
+      <div ref={innerRef} className={clsx(active && styles.peekInner)}>
+        {children}
+      </div>
     </div>
   )
 }

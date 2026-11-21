@@ -488,6 +488,49 @@ export const MessageList = ({
     }
   }, [visibleCount, getScrollEl])
 
+  // 列表不突然变短：思考小窗收起会让页面瞬间少一截，贴底的画面就会先被拽上去、再被回答推回来。
+  // 收起空出来的位置先留着（最多留 320px），让回答填进去；回答很短时这块空白也留着（官端也是这样），
+  // 到切换对话、发新消息或删除时再按实际高度重新算。重新生成这类整段消失的大变化不留，免得一大片空白。
+  // 回答是在消息组件里自己更新的，列表本身不一定重新渲染，所以盯着最后一条消息的尺寸变化
+  useLayoutEffect(() => {
+    const column = columnRef.current
+    if (!column) {
+      return
+    }
+    let held = 0
+    const measure = () => {
+      const last = column.lastElementChild
+      const natural = last ? last.getBoundingClientRect().bottom - column.getBoundingClientRect().top + 24 : 0
+      if (natural >= held || held - natural > 320) {
+        held = natural
+      }
+      column.style.minHeight = `${Math.round(held)}px`
+    }
+    const resize = new ResizeObserver(measure)
+    let watched: Element | null = null
+    const rewatch = () => {
+      const last = column.lastElementChild
+      if (last !== watched) {
+        if (watched) {
+          resize.unobserve(watched)
+        }
+        if (last) {
+          resize.observe(last)
+        }
+        watched = last
+      }
+      measure()
+    }
+    rewatch()
+    const mutation = new MutationObserver(rewatch)
+    mutation.observe(column, { childList: true })
+    return () => {
+      resize.disconnect()
+      mutation.disconnect()
+      column.style.minHeight = ''
+    }
+  }, [session.id, messages.length])
+
   // 删除后把记下的那条消息放回原来的位置
   useLayoutEffect(() => {
     knownIdsRef.current = { sessionId: session.id, ids: new Set(messages.map((message) => message.id)) }
