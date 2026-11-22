@@ -1140,6 +1140,85 @@ const dropRejectedImage = (
   )
 }
 
+const TOO_LARGE_IMAGE = /image is too large|must each be at most \d+ pixels/i
+
+/** 报错位置对应的那张图的 file_id；对不上时返回请求里所有图片的 file_id */
+const rejectedImageIds = (sent: CreateMessageRequest['messages'], message: string): Set<string> => {
+  const position = /messages\.(\d+)\.content\.(\d+)/.exec(message)
+  const content = position ? sent[Number(position[1])]?.content : undefined
+  const block = Array.isArray(content) ? content[Number(position?.[2])] : undefined
+  if (block && block.type === 'image' && 'source' in block && block.source.type === 'file') {
+    return new Set([block.source.file_id])
+  }
+  const ids = new Set<string>()
+  for (const message of sent) {
+    if (Array.isArray(message.content)) {
+      for (const item of message.content) {
+        if (item.type === 'image' && 'source' in item && item.source.type === 'file') {
+          ids.add(item.source.file_id)
+        }
+      }
+    }
+  }
+  return ids
+}
+
+/**
+ * 服务端嫌某张图太大（长或宽超过 4096 像素，多为旧版本原样上传的大图）：
+ * 清掉它的 serverId，重发前会从本机原图重新上传，上传时自动缩到 4096 以内。
+ * 同一张图缩过还被拒（tried 里已有），就标成不支持，免得这段对话之后每一轮都发不出去。
+ */
+const shrinkRejectedImage = (
+  sessionId: string,
+  sent: CreateMessageRequest['messages'],
+  error: unknown,
+  tried: Set<string>
+): boolean => {
+  if (!(error instanceof ApiError) || !TOO_LARGE_IMAGE.test(error.message)) {
+    return false
+  }
+  const targets = rejectedImageIds(sent, error.message)
+  const session = getSession(sessionId)
+  if (targets.size === 0 || !session) {
+    return false
+  }
+  const retry: string[] = []
+  const giveUp: string[] = []
+  for (const message of session.messages) {
+    if (message.role === 'user') {
+      for (const file of message.files) {
+        if (file.isImage && file.serverId && targets.has(file.serverId)) {
+          ;(tried.has(file.id) ? giveUp : retry).push(file.id)
+        }
+      }
+    }
+  }
+  if (retry.length > 0) {
+    retry.forEach((id) => tried.add(id))
+    updateSession(sessionId, (current) => ({
+      ...current,
+      messages: current.messages.map((message) =>
+        message.role === 'user' && message.files.some((file) => retry.includes(file.id))
+          ? {
+              ...message,
+              files: message.files.map((file) => (retry.includes(file.id) ? { ...file, serverId: null } : file)),
+            }
+          : message
+      ),
+    }))
+  }
+  if (giveUp.length > 0) {
+    markUnsupportedImages(sessionId, (file) => giveUp.includes(file.id))
+  }
+  if (retry.length === 0) {
+    return giveUp.length > 0
+  }
+  // 上传任务里可能还留着同一个 serverId，清掉后 ensureServerId 才会重新上传
+  retry.forEach(cancelUpload)
+  persist(sessionId)
+  return true
+}
+
 /** 用会话里的最新消息替换请求快照：重传前会重置附件的 serverId，快照必须跟着更新 */
 const refreshRequest = (sessionId: string, request: Request): Request => {
   const session = getSession(sessionId)
@@ -1341,6 +1420,8 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
     /** 本次尝试实际发出的消息，报「图片不支持」时据此找到是哪张图 */
     let sentMessages: CreateMessageRequest['messages'] = []
     let imageRetries = 0
+    // 这次发送里已经缩小重传过的图（本机 id）
+    const shrunkImages = new Set<string>()
     for (let attempt = 0; ; attempt += 1) {
       /** 附件补齐前出错属于上传失败，请求还没有发出 */
       let preparing = true
@@ -1450,6 +1531,16 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
             retryable: isRetryableApiError(error),
           })
           break
+        }
+        // 图片尺寸太大：从本机原图缩小后重新上传，再重发
+        if (
+          imageRetries < IMAGE_RETRY_LIMIT &&
+          !receivedContent &&
+          shrinkRejectedImage(sessionId, sentMessages, error, shrunkImages)
+        ) {
+          imageRetries += 1
+          attempt -= 1
+          continue
         }
         // 图片格式不被接受：把那张图标成不支持（之后只展示、不发送），再重发
         if (

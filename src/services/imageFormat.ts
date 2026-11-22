@@ -36,7 +36,7 @@ export const sniffSupportedImage = async (blob: Blob): Promise<string> => {
 
 export const isSupportedImageType = (type: string) => SUPPORTED.has(type)
 
-/** 转换时的最长边：再大也看不出区别，还容易超出 iOS 的画布上限 */
+/** 最长边：模型要求长、宽都不超过 4096 像素；再大也看不出区别，还容易超出 iOS 的画布上限 */
 const MAX_SIDE = 4096
 
 const decode = async (blob: Blob): Promise<{ source: CanvasImageSource; width: number; height: number; close: () => void }> => {
@@ -61,49 +61,86 @@ const decode = async (blob: Blob): Promise<{ source: CanvasImageSource; width: n
   }
 }
 
-const jpegName = (name: string) => {
+/** 缩小后的图有没有透明像素：缩到 64×64 抽查，免得在大图上逐像素读 */
+const hasAlpha = (source: CanvasImageSource) => {
+  const probe = document.createElement('canvas')
+  probe.width = 64
+  probe.height = 64
+  const context = probe.getContext('2d', { willReadFrequently: true })
+  if (!context) {
+    return false
+  }
+  context.drawImage(source, 0, 0, 64, 64)
+  const data = context.getImageData(0, 0, 64, 64).data
+  for (let i = 3; i < data.length; i += 4) {
+    if (data[i] < 255) {
+      return true
+    }
+  }
+  return false
+}
+
+const withExt = (name: string, ext: string) => {
   const dot = name.lastIndexOf('.')
-  return `${dot > 0 ? name.slice(0, dot) : name || 'image'}.jpg`
+  return `${dot > 0 ? name.slice(0, dot) : name || 'image'}.${ext}`
+}
+
+/** 画到不超过 MAX_SIDE 的画布上再导出；有透明的导出 PNG，其余 JPEG（透明部分垫白底） */
+const reencode = async (
+  decoded: Awaited<ReturnType<typeof decode>>,
+  name: string,
+  keepAlpha: boolean
+): Promise<{ blob: Blob; name: string }> => {
+  const scale = Math.min(1, MAX_SIDE / Math.max(decoded.width, decoded.height))
+  const width = Math.max(1, Math.round(decoded.width * scale))
+  const height = Math.max(1, Math.round(decoded.height * scale))
+  const canvas = document.createElement('canvas')
+  canvas.width = width
+  canvas.height = height
+  const context = canvas.getContext('2d')
+  if (!context) {
+    throw new UnsupportedImageError()
+  }
+  const png = keepAlpha && hasAlpha(decoded.source)
+  if (!png) {
+    context.fillStyle = '#fff'
+    context.fillRect(0, 0, width, height)
+  }
+  context.drawImage(decoded.source, 0, 0, width, height)
+  const type = png ? 'image/png' : 'image/jpeg'
+  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, type, 0.9))
+  if (!blob || blob.size === 0) {
+    throw new UnsupportedImageError()
+  }
+  return { blob, name: withExt(name, png ? 'png' : 'jpg') }
 }
 
 /**
- * 保证图片是模型支持的格式：支持的原样返回（补上正确的 MIME），其余转成 JPEG。
- * 浏览器解不开的抛出 UnsupportedImageError。
+ * 保证图片能被模型接受：
+ * - 格式：只认 JPEG / PNG / GIF / WebP，其余转成 JPEG；
+ * - 尺寸：长或宽超过 4096 像素会被整段请求拒绝（「its width and height must each be at most 4096 pixels」），
+ *   按比例缩到 4096 以内再传。尺寸正常的支持格式原样返回（补上正确的 MIME）。
+ * 浏览器解不开的抛出 UnsupportedImageError；支持格式但解不开（极少见）就原样上传。
  */
 export const toSupportedImage = async (
   blob: Blob,
   name: string
 ): Promise<{ blob: Blob; name: string }> => {
   const type = await sniffSupportedImage(blob)
-  if (type) {
-    return { blob: blob.type === type ? blob : new Blob([blob], { type }), name }
-  }
   let decoded: Awaited<ReturnType<typeof decode>>
   try {
     decoded = await decode(blob)
   } catch {
+    if (type) {
+      return { blob: blob.type === type ? blob : new Blob([blob], { type }), name }
+    }
     throw new UnsupportedImageError()
   }
   try {
-    const scale = Math.min(1, MAX_SIDE / Math.max(decoded.width, decoded.height))
-    const width = Math.max(1, Math.round(decoded.width * scale))
-    const height = Math.max(1, Math.round(decoded.height * scale))
-    const canvas = document.createElement('canvas')
-    canvas.width = width
-    canvas.height = height
-    const context = canvas.getContext('2d')
-    if (!context) {
-      throw new UnsupportedImageError()
+    if (type && Math.max(decoded.width, decoded.height) <= MAX_SIDE) {
+      return { blob: blob.type === type ? blob : new Blob([blob], { type }), name }
     }
-    // JPEG 没有透明通道，透明部分垫白底
-    context.fillStyle = '#fff'
-    context.fillRect(0, 0, width, height)
-    context.drawImage(decoded.source, 0, 0, width, height)
-    const jpeg = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.9))
-    if (!jpeg || jpeg.size === 0) {
-      throw new UnsupportedImageError()
-    }
-    return { blob: jpeg, name: jpegName(name) }
+    return await reencode(decoded, name, type === 'image/png' || type === 'image/gif' || type === 'image/webp')
   } catch {
     throw new UnsupportedImageError()
   } finally {
