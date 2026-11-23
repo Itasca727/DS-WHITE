@@ -34,12 +34,13 @@
   border-radius: 22px 22px 8px 22px;
   font-size: calc(16px * var(--white-font-scale, 1));
   line-height: calc(24px * var(--white-font-scale, 1));
-  color: var(--dsw-alias-label-primary);
-  /* 微光玻璃：深色半透明底 + 签名渐变细边 */
+  color: var(--white-bubble-ink);
+  /* 签名渐变铺满：冰蓝到靛蓝的底 + 同色系细边，浅色带轻投影、深色带冷光 */
   border: 1px solid transparent;
   background:
-    linear-gradient(var(--white-glass), var(--white-glass)) padding-box,
-    var(--white-rim) border-box;
+    var(--white-bubble-fill) padding-box,
+    var(--white-bubble-rim) border-box;
+  box-shadow: var(--white-bubble-glow);
   white-space: pre-wrap;
   word-break: break-word;
 }

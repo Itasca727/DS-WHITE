@@ -18,6 +18,12 @@ body {
   --white-glow: rgba(92, 107, 254, 0.09);
   --white-on-glass: #4a57e8;
   --white-accent: var(--white-indigo);
+  /* 用户气泡：签名渐变铺满（冰蓝 → 靛蓝），深靛色字 */
+  /* 尾色压低饱和度：长消息铺满大面积时也不会越往后越深 */
+  --white-bubble-fill: linear-gradient(135deg, #dbe8fe, #c9d1ff);
+  --white-bubble-rim: linear-gradient(135deg, #bdd8fd, #8c9eff);
+  --white-bubble-ink: #141a3a;
+  --white-bubble-glow: 0 6px 16px rgba(92, 107, 254, 0.18);
   --white-on-accent: #ffffff;
   --white-caret: var(--white-indigo);
 
@@ -78,6 +84,11 @@ body[data-ds-dark-theme] {
   --white-glow: rgba(92, 107, 254, 0.22);
   --white-on-glass: var(--white-ice);
   --white-accent: var(--white-mid);
+  /* 深色：品牌色里偏灰的那一段（灰蓝），细边沿用冷光渐变 */
+  --white-bubble-fill: linear-gradient(135deg, #262c3e, #2f3650);
+  --white-bubble-rim: linear-gradient(135deg, rgba(189, 216, 253, 0.5), rgba(140, 158, 255, 0.5));
+  --white-bubble-ink: #e7ebf3;
+  --white-bubble-glow: 0 0 14px rgba(140, 158, 255, 0.18);
   --white-on-accent: #0b0d14;
   --white-caret: var(--white-ice);
   --white-icon: #a6b0c4;
