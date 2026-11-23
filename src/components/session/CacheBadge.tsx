@@ -15,7 +15,8 @@ export const lastCacheRate = (session: Session): number | null => {
     if (total <= 0) {
       return null
     }
-    return Math.round(((cache_read_input_tokens || 0) / total) * 100)
+    // 统一保留一位小数并向下取整，只有真正全部命中才显示 100.0%
+    return Math.floor(((cache_read_input_tokens || 0) / total) * 1000) / 10
   }
   return null
 }
@@ -30,9 +31,6 @@ export const CacheBadge = memo(function CacheBadge({ rate }: { rate: number | nu
   }
   return (
     <span className={styles.cache} title={t('cacheHitTitle')} aria-label={`${t('cacheHit')} ${rate}%`}>
-      <span>
-        {t('cacheHit')} {rate}%
-      </span>
       <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
         <circle cx="6" cy="6" r={R} className={styles.cacheTrack} />
         <circle
@@ -44,6 +42,9 @@ export const CacheBadge = memo(function CacheBadge({ rate }: { rate: number | nu
           transform="rotate(-90 6 6)"
         />
       </svg>
+      <span>
+        {t('cacheHit')} {rate.toFixed(1)}%
+      </span>
     </span>
   )
 })

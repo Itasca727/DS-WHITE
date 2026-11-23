@@ -1,6 +1,6 @@
 import { useTranslate } from '../../i18n/index.js'
 import clsx from 'clsx'
-import { memo, useLayoutEffect, useRef, useState } from 'react'
+import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useIsMobile } from '../../app/viewport.js'
 import { IconEditOutline16, IconEllipsisOutline16, IconTrashThin16 } from '../base/icons.js'
 import { Menu } from '../base/Menu.js'
@@ -18,6 +18,7 @@ import {
 import { MessageFile } from './MessageFile.js'
 import { CopyButton } from './CopyButton.js'
 import { startRoundSelection } from './roundSelection.js'
+import { onComposerEngaged } from '../../utils/composerFocus.js'
 import styles from './UserMessage.module.css'
 
 export const UserMessage = memo(function UserMessage({
@@ -46,6 +47,9 @@ export const UserMessage = memo(function UserMessage({
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const isMobile = useIsMobile()
   const canSend = !busy && (draft.trim() !== '' || message.files.length > 0)
+
+  // 点回主输入框即退出编辑，不留两个输入框同时可编辑
+  useEffect(() => (editing ? onComposerEngaged(() => setEditing(false)) : undefined), [editing])
 
   useLayoutEffect(() => {
     const textarea = textareaRef.current

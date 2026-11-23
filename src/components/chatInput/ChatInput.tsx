@@ -35,6 +35,7 @@ import { Spectrum } from './Spectrum.js'
 import { useTranslate } from '../../i18n/index.js'
 import styles from './ChatInput.module.css'
 import { haptic } from '../../utils/haptic.js'
+import { notifyComposerEngaged } from '../../utils/composerFocus.js'
 import { playSendSound } from '../../utils/sound.js'
 
 /** 输入框：自适应高度的文本框 + 文件 + 深度思考与智能搜索开关 + 语音输入 + 发送 / 停止 */
@@ -164,6 +165,8 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
   return (
     <div
       className={clsx(styles.wrapper, sessionId === null ? styles.home : styles.session)}
+      onPointerDown={notifyComposerEngaged}
+      onFocusCapture={notifyComposerEngaged}
       onClick={(event) => {
         if (event.target === event.currentTarget) {
           textareaRef.current?.focus({ preventScroll: true })
