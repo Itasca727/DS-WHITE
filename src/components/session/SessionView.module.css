@@ -76,6 +76,51 @@
   );
 }
 
+.inputFoot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0 14px;
+}
+
+.inputFoot .caveat {
+  width: auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+}
+
+.cache {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  line-height: 16px;
+  font-variant-numeric: tabular-nums;
+  color: var(--dsw-alias-label-tertiary);
+  user-select: none;
+}
+
+.cacheTrack {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  opacity: 0.2;
+}
+
+.cacheArc {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
 .caveat {
   width: 100%;
   padding: 6px 0;

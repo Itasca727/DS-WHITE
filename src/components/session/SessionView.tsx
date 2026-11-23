@@ -8,6 +8,7 @@ import { ChatInput } from '../chatInput/ChatInput.js'
 import { MessageList } from '../messages/MessageList.js'
 import { RoundSelectBar } from '../messages/RoundSelectBar.js'
 import { useRoundSelection } from '../messages/roundSelection.js'
+import { CacheBadge, lastCacheRate } from './CacheBadge.js'
 import { ContextPanel } from './ContextPanel.js'
 import { MobileHeader } from './MobileHeader.js'
 import styles from './SessionView.module.css'
@@ -64,7 +65,10 @@ export const SessionView = ({
               // 从多选退回时，输入框轻轻升起，而不是直接冒出来
               <div className={styles.inputSwap} data-motion={swapped ? 'rise' : undefined}>
                 <ChatInput sessionId={session.id} />
-                <div className={styles.caveat}>{t('contentCaveat')}</div>
+                <div className={styles.inputFoot}>
+                  <span className={styles.caveat}>{t('contentCaveat')}</span>
+                  <CacheBadge rate={lastCacheRate(session)} />
+                </div>
               </div>
             )}
           </div>

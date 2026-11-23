@@ -3,6 +3,8 @@ import type { zh } from './zh.js'
 export const en = {
   welcomeMessageChat250808: 'How can I help you?',
   contentCaveat: 'AI-generated, for reference only',
+  cacheHit: 'Cache hit',
+  cacheHitTitle: 'Input cache hit rate of the latest reply',
   expandSiderbarButton: 'Open sidebar',
   collapseSiderbarButton: 'Close sidebar',
   newChat: 'New chat',

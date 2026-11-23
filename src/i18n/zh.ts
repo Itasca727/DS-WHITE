@@ -1,6 +1,8 @@
 export const zh = {
   welcomeMessageChat250808: '今天有什么可以帮到你？',
   contentCaveat: '内容由 AI 生成，请仔细甄别',
+  cacheHit: '缓存命中',
+  cacheHitTitle: '最近一次回复的输入缓存命中率',
   expandSiderbarButton: '打开边栏',
   collapseSiderbarButton: '收起边栏',
   newChat: '开启新对话',
