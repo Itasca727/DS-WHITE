@@ -31,6 +31,7 @@ import { MessageErrorBoundary } from './MessageErrorBoundary.js'
 import { ScrollToBottomContext } from './scrollContext.js'
 import { UserMessage } from './UserMessage.js'
 import { validCompaction } from '../../services/chat/compaction.js'
+import { estimateTokens } from '../../services/chat/context.js'
 import { useSettings } from '../../services/settings.js'
 import {
   endRoundSelection,
@@ -258,6 +259,10 @@ export const MessageList = ({
   // 渲染时发现有消息被删：趁旧 DOM 还在，记下屏幕顶部第一条留下来的消息和它的位置，提交后放回原处。
   const knownIdsRef = useRef<{ sessionId: string; ids: Set<string> } | null>(null)
   const deleteAnchorRef = useRef<{ id: string; top: number } | null>(null)
+  // 删除后撑住列表的最小高度；空白离开屏幕或发新消息时收回
+  const deleteFloorRef = useRef(0)
+  const deleteBelowRef = useRef(0)
+  const applyHoldRef = useRef<(() => void) | null>(null)
   const known = knownIdsRef.current
   if (known?.sessionId === session.id && !deleteAnchorRef.current) {
     const now = new Set(messages.map((message) => message.id))
@@ -269,6 +274,10 @@ export const MessageList = ({
       }
     }
     const el = removed ? (isMobile ? scrollMobileRef.current : containerRef.current) : null
+    if (el && columnRef.current) {
+      // 删除前的列表高度：删完先撑住，画面才能原地不动（停在底部时也一样）
+      deleteBelowRef.current = columnRef.current.offsetHeight
+    }
     if (el) {
       // 基准选删掉那几轮上方、完整露出来的最后一条：上面不动，下面的内容往上补位（和系统列表删除一样）。
       // 屏幕上方没有完整露出的就用半露的那条；被删的不在屏幕上，就用顶部第一条完整露出的。
@@ -276,11 +285,19 @@ export const MessageList = ({
       let above: { id: string; top: number } | null = null
       let partial: { id: string; top: number } | null = null
       let first: { id: string; top: number } | null = null
+      let offscreen: { id: string; top: number } | null = null
       let removedInView = false
       for (const node of el.querySelectorAll<HTMLElement>('[data-msg]')) {
         const id = node.dataset.msg
         const rect = node.getBoundingClientRect()
-        if (!id || rect.bottom <= box.top + 1) {
+        if (!id) {
+          continue
+        }
+        if (rect.bottom <= box.top + 1) {
+          // 屏幕上方、已经滑出去的最后一条：被删的那轮正好顶在屏幕最上面时，拿它当基准
+          if (now.has(id)) {
+            offscreen = { id, top: rect.top - box.top }
+          }
           continue
         }
         if (rect.top >= box.bottom) {
@@ -298,7 +315,14 @@ export const MessageList = ({
           partial = spot
         }
       }
-      deleteAnchorRef.current = removedInView ? (above ?? partial) : (first ?? partial)
+      deleteAnchorRef.current = removedInView ? (above ?? partial ?? offscreen) : (first ?? partial)
+      const columnTop = columnRef.current?.getBoundingClientRect().top
+      if (deleteAnchorRef.current && columnTop !== undefined) {
+        // 基准消息以下原来占的高度：删完要留够这么多，画面才能停在原处
+        deleteBelowRef.current -= deleteAnchorRef.current.top + box.top - columnTop
+      } else {
+        deleteBelowRef.current = 0
+      }
     }
   }
 
@@ -504,8 +528,9 @@ export const MessageList = ({
       if (natural >= held || held - natural > 320) {
         held = natural
       }
-      column.style.minHeight = `${Math.round(held)}px`
+      column.style.minHeight = `${Math.round(Math.max(held, deleteFloorRef.current))}px`
     }
+    applyHoldRef.current = measure
     const resize = new ResizeObserver(measure)
     let watched: Element | null = null
     const rewatch = () => {
@@ -527,9 +552,39 @@ export const MessageList = ({
     return () => {
       resize.disconnect()
       mutation.disconnect()
+      applyHoldRef.current = null
       column.style.minHeight = ''
     }
   }, [session.id, messages.length])
+
+  // 发新消息、切换对话时不再撑着删除留下的空白
+  const floorKeyRef = useRef({ sessionId: session.id, count: messages.length })
+  if (floorKeyRef.current.sessionId !== session.id || messages.length > floorKeyRef.current.count) {
+    deleteFloorRef.current = 0
+  }
+  floorKeyRef.current = { sessionId: session.id, count: messages.length }
+
+  // 往上滑到删除留下的空白完全离开屏幕后再收回：收的是屏幕外的部分，看不出变化
+  useEffect(() => {
+    const el = getScrollEl()
+    const column = columnRef.current
+    if (!el || !column) {
+      return
+    }
+    const onScroll = () => {
+      if (!deleteFloorRef.current) {
+        return
+      }
+      const last = column.lastElementChild
+      const natural = last ? last.getBoundingClientRect().bottom - el.getBoundingClientRect().top + 24 : 0
+      if (natural >= el.clientHeight - 1) {
+        deleteFloorRef.current = 0
+        applyHoldRef.current?.()
+      }
+    }
+    el.addEventListener('scroll', onScroll, { passive: true })
+    return () => el.removeEventListener('scroll', onScroll)
+  }, [getScrollEl, session.id])
 
   // 删除后把记下的那条消息放回原来的位置
   useLayoutEffect(() => {
@@ -541,16 +596,23 @@ export const MessageList = ({
       return
     }
     const node = el.querySelector<HTMLElement>(`[data-msg="${CSS.escape(anchor.id)}"]`)
-    if (!node) {
+    const column = columnRef.current
+    if (!node || !column) {
       return
     }
+    // 上方可能补进了更早的消息：按基准消息的新位置，把它下面原来的高度撑回来
+    deleteFloorRef.current =
+      node.getBoundingClientRect().top - column.getBoundingClientRect().top + deleteBelowRef.current
+    deleteBelowRef.current = 0
+    applyHoldRef.current?.()
     const delta = node.getBoundingClientRect().top - el.getBoundingClientRect().top - anchor.top
     if (Math.abs(delta) > 0.5) {
       el.scrollTop += delta
       writtenTopRef.current = el.scrollTop
       lastTopRef.current = el.scrollTop
     }
-    followRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < STICKY_THRESHOLD
+    // 底下撑着删除留下的空白时不贴底，否则会被拉到空白最底下
+    followRef.current = !deleteFloorRef.current && el.scrollHeight - el.scrollTop - el.clientHeight < STICKY_THRESHOLD
   })
 
   useEffect(closeSearchPanel, [session.id, lastMessageId])
@@ -847,7 +909,13 @@ export const MessageList = ({
                 </MessageItem>,
                 message.id === dividerAfter && compaction ? (
                   <div key="compaction-divider" className={styles.compactDivider} role="note">
-                    <span>{t('compactionDivider', { count: compaction.msgIds.length })}</span>
+                    <span>
+                      {t('compactionDivider', {
+                        count: compaction.msgIds.length,
+                        before: Math.round(compaction.coveredTokens).toLocaleString('en-US'),
+                        after: Math.round(estimateTokens(compaction.text)).toLocaleString('en-US'),
+                      })}
+                    </span>
                   </div>
                 ) : null,
               ]

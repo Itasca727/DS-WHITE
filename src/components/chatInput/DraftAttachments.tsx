@@ -1,11 +1,12 @@
 import clsx from 'clsx'
-import { memo } from 'react'
+import { memo, useState } from 'react'
 import { useTranslate } from '../../i18n/index.js'
 import { useUploads, type UploadTask } from '../../services/attachments.js'
 import type { DraftAttachment } from '../../services/chat/drafts.js'
 import { IconCloseFill14, IconRefreshOutline16 } from '../base/icons.js'
 import { Tooltip } from '../base/Tooltip.js'
 import { FileCard } from '../files/FileCard.js'
+import { ImageViewer } from '../messages/ImageViewer.js'
 import styles from './ChatInput.module.css'
 
 const UPLOADING: UploadTask = { status: 'uploading' }
@@ -57,12 +58,24 @@ const AttachmentItem = ({
   const retryLabel = t('uploadRetry', { message: error ?? t('uploadFileStatusFailed') })
   // 「上传失败」只显示重试图标，其余原因写在图片上：可重试时在图标下方，不可重试时贴底
   const showReason = failed && error !== undefined && error !== t('uploadFileStatusFailed')
+  const [viewing, setViewing] = useState(false)
   return item.previewUrl ? (
     <div
       className={clsx(styles.attachment, failed && styles.attachmentFailed)}
       title={error ?? item.file.name}
     >
-      <img src={item.previewUrl} alt={item.file.name} />
+      {/* 点缩略图放大预览，和消息里的图片一样 */}
+      <button
+        type="button"
+        className={styles.attachmentView}
+        aria-label={t('imagePreview', { name: item.file.name })}
+        onClick={() => setViewing(true)}
+      >
+        <img src={item.previewUrl} alt={item.file.name} />
+      </button>
+      {viewing ? (
+        <ImageViewer src={item.previewUrl} alt={item.file.name} onClose={() => setViewing(false)} />
+      ) : null}
       {status === 'uploading' ? <div className={styles.uploading} /> : null}
       {failed && retry ? (
         <Tooltip content={retryLabel}>

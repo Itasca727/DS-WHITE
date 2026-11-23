@@ -291,3 +291,14 @@
   color: var(--white-on-glass);
   background: color-mix(in srgb, var(--white-accent) 14%, transparent);
 }
+
+/* 压缩前后的 token 估算：随输入实时更新 */
+.compressPreview {
+  margin: 10px 0 0;
+  padding: 8px 12px;
+  border-radius: 10px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--white-accent, #6f7dff);
+  background: color-mix(in srgb, var(--white-accent, #8fa3ff) 10%, transparent);
+}

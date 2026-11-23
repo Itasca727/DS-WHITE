@@ -160,15 +160,17 @@
 }
 
 /* ---------- 按轮多选删除 ---------- */
+/* 勾选圈放进左侧留白里：正文宽度不变，进出多选、删除时不会重新排版，页面不跳 */
 .selecting {
+  --select-gutter: 20px;
   position: relative;
-  padding-left: 34px;
+  margin-left: calc(-1 * var(--select-gutter));
+  padding-left: var(--select-gutter);
   border-radius: 14px;
   cursor: pointer;
   user-select: none;
   -webkit-user-select: none;
   transition:
-    padding-left 220ms var(--ds-ease-in-out, ease),
     background-color 200ms ease,
     opacity 200ms ease;
 }
@@ -194,7 +196,7 @@
   content: '';
   position: absolute;
   top: 0;
-  left: 34px;
+  left: var(--select-gutter);
   right: 14px;
   height: 1px;
   background: color-mix(in srgb, var(--white-accent, #8fa3ff) 14%, transparent);
@@ -202,10 +204,10 @@
 
 .selectMark {
   position: absolute;
-  left: 7px;
+  left: 1px;
   top: 14px;
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
   border-radius: 50%;
   border: 1.25px solid var(--white-icon-muted, rgba(200, 210, 255, 0.45));
   background: transparent;
@@ -224,10 +226,10 @@
 .selected .selectMark::after {
   content: '';
   position: absolute;
-  left: 6.5px;
-  top: 3px;
-  width: 5px;
-  height: 10px;
+  left: 5.5px;
+  top: 2.5px;
+  width: 4.5px;
+  height: 9px;
   border: solid var(--white-on-accent, #0b0d14);
   border-width: 0 1.75px 1.75px 0;
   transform: rotate(45deg);

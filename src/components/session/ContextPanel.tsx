@@ -3,7 +3,7 @@ import { useMemo, useRef, useState } from 'react'
 import { useExitGhost } from '../../utils/exitGhost.js'
 import { useTranslate } from '../../i18n/index.js'
 import { getVisibleMessages } from '../../services/chat/branches.js'
-import { estimateTokens } from '../../services/chat/context.js'
+import { buildSummary, estimateTokens } from '../../services/chat/context.js'
 import { getContextRounds, getReplyText } from '../../services/chat/reply.js'
 import {
   setContextCompress,
@@ -32,6 +32,9 @@ const RECENT_COUNTS = [20, 10, 5]
  * - 逐轮勾选，排除后不再进入请求；
  * - 把最早 N 轮压成摘要，其余原样发送；默认 0 即纯官方语义。
  */
+/** token 数加千分位，好读 */
+const fmt = (value: number) => Math.round(value).toLocaleString('en-US')
+
 export const ContextPanel = ({ session, onClose }: { session: Session; onClose: () => void }) => {
   const t = useTranslate()
   const maskRef = useRef<HTMLDivElement>(null)
@@ -63,6 +66,22 @@ export const ContextPanel = ({ session, onClose }: { session: Session; onClose: 
   )
 
   const allIds = rounds.map(([user]) => user.id)
+
+  // 压缩前后的 token 估算：输入框里改数字时就能看到能省多少
+  const roundTokens = ([user, reply]: (typeof rounds)[number]) =>
+    estimateTokens(user.content) + estimateTokens(getReplyText(reply))
+  const included = rounds.filter(([user]) => !excluded.has(user.id))
+  const compressEstimate = (count: number) => {
+    const part = included.slice(0, count)
+    const before = part.reduce((sum, round) => sum + roundTokens(round), 0)
+    const summary = buildSummary(part)
+    const after = summary ? estimateTokens(`【早期对话摘要】\n${summary}`) : 0
+    const total = included.reduce((sum, round) => sum + roundTokens(round), 0)
+    return { before, after, total, totalAfter: total - before + after }
+  }
+  const applied = compress > 0 ? compressEstimate(compress) : null
+  const previewCount = Math.max(0, Math.min(rounds.length, Math.floor(Number(compressInput)) || 0))
+  const estimate = previewCount > 0 ? compressEstimate(previewCount) : null
 
   const applyCompress = (value: number) => {
     const next = Math.max(0, Math.min(rounds.length, Math.floor(value) || 0))
@@ -114,15 +133,27 @@ export const ContextPanel = ({ session, onClose }: { session: Session; onClose: 
             <div className={styles.title}>{t('contextManagerTitle')}</div>
             <div className={styles.sub}>
               {t('contextRounds', { count: rounds.length })} ·{' '}
-              {t('contextTokens', { count: tokens })}
+              {applied
+                ? t('contextTokensAfter', { count: fmt(tokens), after: fmt(applied.totalAfter) })
+                : t('contextTokens', { count: fmt(tokens) })}
             </div>
             {autoCompact && compaction ? (
               <div className={styles.sub}>
-                {t('contextCompactionStatus', { count: compaction.msgIds.length })}
+                {t('contextCompactionStatus', {
+                  count: compaction.msgIds.length,
+                  before: fmt(compaction.coveredTokens),
+                  after: fmt(estimateTokens(compaction.text)),
+                })}
               </div>
             ) : null}
             {compress > 0 ? (
-              <div className={styles.sub}>{t('contextCompressStatus', { count: compress })}</div>
+              <div className={styles.sub}>
+                {t('contextCompressStatus', {
+                  count: compress,
+                  before: fmt(applied?.before ?? 0),
+                  after: fmt(applied?.after ?? 0),
+                })}
+              </div>
             ) : null}
           </div>
           <button
@@ -163,6 +194,17 @@ export const ContextPanel = ({ session, onClose }: { session: Session; onClose: 
               </button>
             ))}
           </div>
+          {estimate ? (
+            <p className={styles.compressPreview} aria-live="polite">
+              {t('contextCompressPreview', {
+                count: previewCount,
+                before: fmt(estimate.before),
+                after: fmt(estimate.after),
+                total: fmt(estimate.total),
+                totalAfter: fmt(estimate.totalAfter),
+              })}
+            </p>
+          ) : null}
           <p className={styles.hint}>{t('contextCompressHint')}</p>
         </section>
 

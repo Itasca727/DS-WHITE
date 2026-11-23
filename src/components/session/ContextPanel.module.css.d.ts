@@ -27,5 +27,6 @@ declare const styles: {
   readonly "note": string;
   readonly "compacted": string;
   readonly "compactTag": string;
+  readonly "compressPreview": string;
 };
 export = styles;
