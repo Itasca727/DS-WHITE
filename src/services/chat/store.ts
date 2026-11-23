@@ -588,6 +588,18 @@ export const setContextExcludedMany = (id: string, userIds: string[], excluded: 
 }
 
 /** 上下文管理：把最早 N 轮压成摘要；传 0 清除。 */
+/** 上下文管理：一次把排除名单换成给定的这些（「最近 N 轮」用），只更新、只存一次。 */
+export const setContextExcludedExact = (id: string, userIds: string[]) => {
+  if (get().importingHistory || deletingSessions.has(id)) {
+    return
+  }
+  if (!getSession(id)) {
+    return
+  }
+  updateSession(id, (current) => ({ ...current, contextExcluded: [...userIds] }))
+  persist(id)
+}
+
 export const setContextCompress = (id: string, count: number) => {
   if (get().importingHistory || deletingSessions.has(id)) {
     return

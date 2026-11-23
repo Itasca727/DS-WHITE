@@ -90,6 +90,7 @@
 
 /* ---------- 内容区 ---------- */
 .scroll {
+  position: relative;
   flex: 1;
   min-height: 0;
   overflow-y: auto;
@@ -544,21 +545,31 @@
 }
 
 .row {
+  /* 固定行高：长列表按窗口渲染要靠它算位置（ContextPanel.tsx 的 ROW_HEIGHT） */
+  box-sizing: border-box;
+  height: 66px;
+  overflow: hidden;
   display: flex;
   align-items: flex-start;
   gap: 12px;
-  padding: 12px 16px 12px 18px;
+  padding: 12px 16px 11px 18px;
   border-top: 1px solid var(--ctx-line);
   cursor: pointer;
-  transition: opacity 160ms ease;
 }
 
 .row:hover {
   background: color-mix(in srgb, var(--dsw-alias-label-primary) 3%, transparent);
 }
 
-.off {
-  opacity: 0.45;
+/* 排除的轮次：文字变淡。不用 opacity——几百行一起切换时每行都要单独合成一层，很卡 */
+.off .user,
+.off .index,
+.off .tokens {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.off .reply {
+  color: color-mix(in srgb, var(--dsw-alias-label-tertiary) 70%, transparent);
 }
 
 /* 原生复选框只负责键盘和读屏，外观换成和多选删除一样的勾选圈 */
@@ -581,10 +592,6 @@
   border-radius: 50%;
   border: 1.5px solid var(--white-icon-muted, rgba(122, 130, 148, 0.55));
   color: transparent;
-  transition:
-    background-color 160ms ease,
-    border-color 160ms ease,
-    box-shadow 200ms ease;
 
   svg {
     position: absolute;
@@ -595,7 +602,6 @@
 .checkInput:checked + .ring {
   border-color: transparent;
   background: var(--white-accent);
-  box-shadow: 0 0 10px color-mix(in srgb, var(--white-accent) 45%, transparent);
   color: var(--white-on-accent, #ffffff);
 }
 

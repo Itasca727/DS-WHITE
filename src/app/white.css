@@ -18,9 +18,9 @@ body {
   --white-glow: rgba(92, 107, 254, 0.09);
   --white-on-glass: #4a57e8;
   --white-accent: var(--white-indigo);
-  /* 用户气泡：签名渐变铺满（冰蓝 → 靛蓝），深靛色字 */
-  /* 尾色压低饱和度：长消息铺满大面积时也不会越往后越深 */
-  --white-bubble-fill: linear-gradient(135deg, #dbe8fe, #c9d1ff);
+  /* 用户气泡：冰蓝底 + 签名渐变细边，深靛色字 */
+  /* 浅色：冰蓝纯色铺满（不做渐变，长消息也均匀） */
+  --white-bubble-fill: linear-gradient(#dbe8fe, #dbe8fe);
   --white-bubble-rim: linear-gradient(135deg, #bdd8fd, #8c9eff);
   --white-bubble-ink: #141a3a;
   --white-bubble-glow: 0 6px 16px rgba(92, 107, 254, 0.18);
