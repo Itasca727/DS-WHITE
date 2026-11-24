@@ -353,6 +353,7 @@ export const zh = {
   contextSqueezedTag: '已压缩',
   contextAllOn: '全部纳入',
   contextAllOff: '全部排除',
+  contextClearAll: '全部清除',
   contextLastN: '仅最近 {count} 轮',
   contextEmpty: '还没有可管理的问答轮次',
   contextAttachmentOnly: '（仅附件）',

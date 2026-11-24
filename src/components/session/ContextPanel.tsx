@@ -19,8 +19,6 @@ import type {
 import { validCompaction } from "../../services/chat/compaction.js";
 import { setAutoCompact, useSettings } from "../../services/settings.js";
 import { Button } from "../base/Button.js";
-import { IconEllipsisOutline16 } from "../base/icons.js";
-import { Menu } from "../base/Menu.js";
 import { Modal } from "../base/Modal.js";
 import styles from "./ContextPanel.module.css";
 import { useEdgeSwipeBack } from "../historySearch/useEdgeSwipeBack.js";
@@ -138,7 +136,7 @@ export const ContextPanel = ({
   const [view, setView] = useState({ top: 0, height: 900, listTop: 0 });
   const windowed = rounds.length > WINDOW_FROM;
   useEffect(() => {
-    const box = scrollRef.current;
+    const box = listRef.current;
     if (!box || !windowed) {
       return;
     }
@@ -148,7 +146,7 @@ export const ContextPanel = ({
       setView({
         top: box.scrollTop,
         height: box.clientHeight,
-        listTop: listRef.current?.offsetTop ?? 0,
+        listTop: 0,
       });
     };
     const schedule = () => {
@@ -158,9 +156,6 @@ export const ContextPanel = ({
     box.addEventListener("scroll", schedule, { passive: true });
     const observer = new ResizeObserver(schedule);
     observer.observe(box);
-    if (box.firstElementChild) {
-      observer.observe(box.firstElementChild);
-    }
     return () => {
       cancelAnimationFrame(frame);
       box.removeEventListener("scroll", schedule);
@@ -238,27 +233,23 @@ export const ContextPanel = ({
     }
   };
 
-  /** 把第 index 轮（从 0 数）滚到面板底部可见；只滚面板自己，不带动整页 */
+  /** 在轮次卡片自己的列表里把第 index 轮（从 0 数）滚到顶部附近，露出上一轮作分界；不带动外层面板 */
   const scrollToRound = (index: number) => {
     requestAnimationFrame(() => {
-      const box = scrollRef.current;
       const list = listRef.current;
-      if (!box || !list || index < 0) {
+      if (!list || index < 0) {
         return;
       }
-      const rowBottom = list.offsetTop + (index + 1) * ROW_HEIGHT;
-      const target = rowBottom - box.clientHeight + 12;
-      if (target > box.scrollTop) {
-        box.scrollTo({ top: target, behavior: windowed ? "auto" : "smooth" });
-      }
+      const target = Math.max(0, index * ROW_HEIGHT - ROW_HEIGHT / 2);
+      list.scrollTo({ top: target, behavior: windowed ? "auto" : "smooth" });
     });
   };
 
   /** 只带最近 count 轮：更早的全部取消勾选 */
   const keepRecent = (count: number) => {
     setContextExcludedExact(session.id, allIds.slice(0, -count));
-    // 列表滚到勾选的最后一轮，一眼看到哪些被选上了
-    scrollToRound(allIds.length - 1);
+    // 卡片内的列表滚到保留的第一轮，一眼看到从哪里开始
+    scrollToRound(Math.max(0, allIds.length - count));
   };
 
   const ranges: {
@@ -509,34 +500,14 @@ export const ContextPanel = ({
                 <h3 className={styles.cardTitle}>{t("contextRangeTitle")}</h3>
                 <span className={styles.cardSub}>{t("contextRangeSub")}</span>
               </div>
-              <Menu
-                options={[
-                  {
-                    key: "all-on",
-                    label: t("contextAllOn"),
-                    icon: null,
-                    onSelect: () => setContextExcludedExact(session.id, []),
-                  },
-                  {
-                    key: "all-off",
-                    label: t("contextAllOff"),
-                    icon: null,
-                    onSelect: () =>
-                      setContextExcludedMany(session.id, allIds, true),
-                  },
-                ]}
+              <button
+                type="button"
+                className={styles.clearAll}
+                disabled={rounds.length === 0 || excluded.size >= allIds.length}
+                onClick={() => setContextExcludedMany(session.id, allIds, true)}
               >
-                {({ toggle }) => (
-                  <button
-                    type="button"
-                    className={styles.more}
-                    aria-label={t("contextMore")}
-                    onClick={toggle}
-                  >
-                    <IconEllipsisOutline16 />
-                  </button>
-                )}
-              </Menu>
+                {t("contextClearAll")}
+              </button>
             </div>
             <div
               className={styles.segment}

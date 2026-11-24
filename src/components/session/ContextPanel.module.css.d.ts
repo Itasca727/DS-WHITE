@@ -47,7 +47,7 @@ declare const styles: {
   readonly "rangeCard": string;
   readonly "rangeHead": string;
   readonly "rangeTitle": string;
-  readonly "more": string;
+  readonly "clearAll": string;
   readonly "segment": string;
   readonly "segmentOn": string;
   readonly "list": string;

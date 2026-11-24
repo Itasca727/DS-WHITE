@@ -362,6 +362,7 @@ export const en = {
   contextSqueezedTag: 'Compressed',
   contextAllOn: 'Include all',
   contextAllOff: 'Exclude all',
+  contextClearAll: 'Clear all',
   contextLastN: 'Last {count} rounds only',
   contextEmpty: 'No rounds to manage yet',
   contextAttachmentOnly: '(attachments only)',
