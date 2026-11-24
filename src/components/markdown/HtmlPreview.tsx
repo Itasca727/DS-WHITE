@@ -14,11 +14,23 @@ export const HtmlPreview = ({ code, onClose }: { code: string; onClose: () => vo
   const [run, setRun] = useState(0)
 
   const close = () => {
+    // 先把对话页显示回来，关闭动画时底下不是空白
+    document.body.removeAttribute('data-html-preview')
     setClosing(true)
     setTimeout(onClose, 180)
   }
   const closeRef = useRef(close)
   closeRef.current = close
+
+  // 预览打开时把底下的对话页藏起来、暂停它的循环动画：
+  // iPhone 上沙盒网页和对话页共用一个线程，长对话一直在后面绘制会把预览拖慢
+  useEffect(() => {
+    const timer = setTimeout(() => document.body.setAttribute('data-html-preview', ''), 220)
+    return () => {
+      clearTimeout(timer)
+      document.body.removeAttribute('data-html-preview')
+    }
+  }, [])
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {

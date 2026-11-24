@@ -107,3 +107,12 @@
     transform: translateY(12px);
   }
 }
+
+/* 预览盖满全屏时，底下的对话页不再绘制，循环动画也停下 */
+:global(body[data-html-preview] #root) {
+  visibility: hidden;
+}
+
+:global(body[data-html-preview] #root *) {
+  animation-play-state: paused !important;
+}
