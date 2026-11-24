@@ -5,18 +5,17 @@ import { useChatStore } from '../../services/chat/store.js'
 import { haptic } from '../../utils/haptic.js'
 import { Button } from './Button.js'
 import {
-  IconDownloadOutline16,
+  IconDataOutline16,
   IconEditOutline16,
-  IconEllipsisOutline16,
-  IconPinOutline16,
-  IconRefreshOutline16,
+  IconPlayOutline16,
+  IconSearchOutline16,
 } from './icons.js'
 import { acknowledged, useSplashDone } from './IntroNotice.js'
 import { Modal } from './Modal.js'
 import styles from './IntroNotice.module.css'
 
 /** 当前这条更新公告对应的版本；改了内容就换版本号，老用户会再看到一次 */
-const NOTICE_VERSION = '1.0.4'
+const NOTICE_VERSION = '1.1.2'
 const KEY = 'chat-demo:update-notice'
 
 const readSeen = () => {
@@ -41,12 +40,20 @@ const emphasize = (text: string): ReactNode[] =>
     part.startsWith('【') ? <strong key={index}>{part.slice(1, -1)}</strong> : part
   )
 
-/** 连选：两端的小圆点连成一段 */
-const IconRange = () => (
+/** 图片：小画框加一座山 */
+const IconImage = () => (
   <svg width={16} height={16} viewBox="0 0 16 16" fill="none" aria-hidden="true">
-    <circle cx="8" cy="3" r="1.9" stroke="currentColor" strokeWidth="1.3" />
-    <circle cx="8" cy="13" r="1.9" stroke="currentColor" strokeWidth="1.3" />
-    <path d="M8 5v6" stroke="currentColor" strokeWidth="1.3" strokeDasharray="1.6 1.6" />
+    <rect x="2" y="3" width="12" height="10" rx="2.2" stroke="currentColor" strokeWidth="1.3" />
+    <circle cx="5.8" cy="6.4" r="1.1" fill="currentColor" />
+    <path d="M2.6 11.6l3.3-3 2.4 2.1 2-1.7 3.1 2.6" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+  </svg>
+)
+
+/** 命中率：一圈底环加一段弧 */
+const IconRing = () => (
+  <svg width={16} height={16} viewBox="0 0 16 16" fill="none" aria-hidden="true">
+    <circle cx="8" cy="8" r="5.6" stroke="currentColor" strokeWidth="1.3" opacity="0.3" />
+    <path d="M8 2.4a5.6 5.6 0 1 1-5.3 7.4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
   </svg>
 )
 
@@ -85,14 +92,14 @@ export const UpdateNotice = () => {
     haptic()
     setOpen(false)
   }
-  // 最要紧的两条（习惯变了、最常用的新功能）放最前面并高亮
+  // 最要紧的四条放最前面并高亮
   const items = [
-    { icon: <IconEllipsisOutline16 />, title: t('updateLongPressTitle'), text: t('updateLongPress'), key: true },
-    { icon: <IconDownloadOutline16 />, title: t('updateExportTitle'), text: t('updateExport'), key: true },
-    { icon: <IconPinOutline16 />, title: t('updatePinTitle'), text: t('updatePin') },
-    { icon: <IconRange />, title: t('updateRangeTitle'), text: t('updateRange') },
-    { icon: <IconEditOutline16 />, title: t('updateEditTitle'), text: t('updateEdit') },
-    { icon: <IconRefreshOutline16 />, title: t('updateFlashTitle'), text: t('updateFlash') },
+    { icon: <IconDataOutline16 />, title: t('updateContextTitle'), text: t('updateContext'), key: true },
+    { icon: <IconPlayOutline16 />, title: t('updatePreviewTitle'), text: t('updatePreview'), key: true },
+    { icon: <IconSearchOutline16 />, title: t('updateJumpTitle'), text: t('updateJump'), key: true },
+    { icon: <IconImage />, title: t('updateImageTitle'), text: t('updateImage'), key: true },
+    { icon: <IconRing />, title: t('updateCacheTitle'), text: t('updateCache') },
+    { icon: <IconEditOutline16 />, title: t('updateInteractTitle'), text: t('updateInteract') },
   ]
   return (
     <Modal
