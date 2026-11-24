@@ -1,0 +1,109 @@
+.viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 3000;
+  display: flex;
+  flex-direction: column;
+  background: rgb(246, 247, 251);
+  animation: preview-in 0.22s ease both;
+}
+
+:global(body[data-ds-dark-theme]) .viewer {
+  background: rgb(8, 10, 16);
+}
+
+.viewer[data-closing] {
+  animation: preview-out 0.18s ease both;
+}
+
+.bar {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 8px;
+  padding: calc(10px + env(safe-area-inset-top)) 12px 10px 16px;
+}
+
+.title {
+  flex-shrink: 0;
+  color: var(--dsw-alias-label-primary);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.note {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.action {
+  flex-shrink: 0;
+  height: 32px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--white-glass);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--white-accent) 22%, transparent);
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.close {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0 0 2px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--white-glass);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--white-accent) 28%, transparent);
+  color: var(--white-icon);
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.frame {
+  flex: 1;
+  min-height: 0;
+  margin: 0 10px calc(10px + env(safe-area-inset-bottom));
+  overflow: hidden;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--white-accent) 22%, transparent),
+    0 12px 40px rgba(0, 0, 0, 0.18);
+
+  iframe {
+    display: block;
+    width: 100%;
+    height: 100%;
+    border: 0;
+  }
+}
+
+@keyframes preview-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+
+@keyframes preview-out {
+  to {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}

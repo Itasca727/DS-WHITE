@@ -280,11 +280,27 @@ const EATEN_TAB =
   /\t(ext(?:color|bf|it|rm|sf|tt|normal|up)?|imes|frac|heta|au|ilde|an|ag|op|riangle|herefore|extstyle)(?![A-Za-z])/g
 
 /** 卡片转网页排版前的清理：去零宽字符、修回 \t、还原 Markdown 转义（和 fixLatex 开头一样） */
+/** 模型偶尔漏写结尾的 }（常见于包住整张卡片的 \colorbox{…}{ … }），在末尾补齐，否则整块公式都渲染不出来 */
+export const closeBraces = (input: string): string => {
+  let depth = 0
+  for (let index = 0; index < input.length; index++) {
+    const char = input[index]
+    if (char === '\\') {
+      index++
+    } else if (char === '{') {
+      depth++
+    } else if (char === '}' && depth > 0) {
+      depth--
+    }
+  }
+  return depth > 0 ? `${input.trimEnd()}\n${'}'.repeat(depth)}` : input
+}
+
 export const cleanCardSource = (input: string): string =>
-  unescapeMarkdown(input.replace(ZERO_WIDTH, '').replace(EATEN_TAB, '\\t$1'))
+  closeBraces(unescapeMarkdown(input.replace(ZERO_WIDTH, '').replace(EATEN_TAB, '\\t$1')))
 
 export const fixLatex = (input: string): string => {
-  let source = input.replace(ZERO_WIDTH, '').replace(EATEN_TAB, '\\t$1')
+  let source = closeBraces(input.replace(ZERO_WIDTH, '').replace(EATEN_TAB, '\\t$1'))
   if (isCard(source)) {
     // 中间点 · 在 KaTeX 的文字模式里会报错，换成外观相同的「・」
     source = unescapeMarkdown(source).replace(/\u00B7/g, '\u30FB')

@@ -653,3 +653,19 @@ export const IconTrashThin16 = () => (
     <path d="M6.6 7v4M9.4 7v4" />
   </svg>
 )
+
+export const IconPlayOutline16 = () => (
+  <svg
+    width={16}
+    height={16}
+    viewBox="0 0 16 16"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth={1.3}
+    strokeLinejoin="round"
+    xmlns="http://www.w3.org/2000/svg"
+    aria-hidden="true"
+  >
+    <path d="M4.75 3.2v9.6c0 .5.55.8.97.53l7.2-4.8a.63.63 0 0 0 0-1.06l-7.2-4.8a.63.63 0 0 0-.97.53z" />
+  </svg>
+)

@@ -328,9 +328,19 @@ export const ContextPanel = ({
         <div ref={scrollRef} className={styles.scroll}>
           {showHelp ? (
             <div className={styles.helpBox}>
-              <p>{t("contextCompressHint")}</p>
-              <p>{t("contextAutoCompressHint")}</p>
-              <p>{t("contextHint")}</p>
+              {(
+                [
+                  ["contextEstimateLabel", "contextHelpEstimate"],
+                  ["contextCompressTitle", "contextCompressHint"],
+                  ["contextAutoCompress", "contextAutoCompressHint"],
+                  ["contextRangeTitle", "contextHint"],
+                ] as const
+              ).map(([title, body]) => (
+                <p key={title}>
+                  <strong>{t(title)}</strong>
+                  {t(body)}
+                </p>
+              ))}
             </div>
           ) : null}
 

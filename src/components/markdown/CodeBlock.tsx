@@ -6,13 +6,23 @@ import {
   isHighlightLoaded,
   loadHighlight,
 } from '../../services/markdown/highlight.js'
-import { IconCheckOutline16, IconCopyOutline16 } from '../base/icons.js'
+import { IconCheckOutline16, IconCopyOutline16, IconPlayOutline16 } from '../base/icons.js'
 import { showToast } from '../base/toastState.js'
 import { copyText } from '../../utils/clipboard.js'
 import { MermaidDiagram } from './MermaidDiagram.js'
+import { HtmlPreview } from './HtmlPreview.js'
 import styles from './CodeBlock.module.css'
 
-/** 代码块标题栏：左侧语言名，右侧复制 */
+/** html 代码块，或没标语言但内容明显是整页 HTML 的，提供网页预览 */
+const isHtml = (infostring: string, code: string) => {
+  const lang = infostring.trim().toLowerCase()
+  if (lang === 'html' || lang === 'htm' || lang === 'xhtml') {
+    return true
+  }
+  return (lang === '' || lang === 'xml' || lang === 'markup') && /^\s*(<!doctype html|<html[\s>])/i.test(code)
+}
+
+/** 代码块标题栏：左侧语言名，右侧预览（仅 HTML）和复制 */
 const CodeInfoRow = ({
   code,
   infostring,
@@ -26,6 +36,8 @@ const CodeInfoRow = ({
 }) => {
   const t = useTranslate()
   const [copied, setCopied] = useState(false)
+  const [previewing, setPreviewing] = useState(false)
+  const canPreview = isHtml(infostring, code)
   return (
     <div className={styles.container}>
       {onToggleDiagram ? (
@@ -50,6 +62,13 @@ const CodeInfoRow = ({
       ) : (
         <span className={styles.name}>{infostring}</span>
       )}
+      <span className={styles.actions}>
+      {canPreview ? (
+        <button type="button" className={styles.button} onClick={() => setPreviewing(true)}>
+          <IconPlayOutline16 />
+          <span>{t('htmlPreview')}</span>
+        </button>
+      ) : null}
       <button
         type="button"
         className={styles.button}
@@ -65,6 +84,8 @@ const CodeInfoRow = ({
         {copied ? <IconCheckOutline16 /> : <IconCopyOutline16 />}
         <span>{t(copied ? 'copied' : 'copy')}</span>
       </button>
+      </span>
+      {previewing ? <HtmlPreview code={code} onClose={() => setPreviewing(false)} /> : null}
     </div>
   )
 }
