@@ -407,6 +407,7 @@ export const zh = {
   memoryUsageOutput: '输出 tokens',
   memoryUsageCache: '缓存 tokens',
   loadEarlier: '加载更早的消息',
+  loadNewer: '加载更新的消息',
   scrollToBottom: '回到底部',
   messageRenderFailed: '这条消息渲染失败，已跳过',
   searchHistoryPlaceholder: '搜索历史对话内容',

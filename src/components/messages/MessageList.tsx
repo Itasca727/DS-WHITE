@@ -71,6 +71,8 @@ const PAGE_SIZE = 60
 const PAGE_SIZE_MOBILE = 24
 /** 跳到某条消息时，它前面多渲染几条，往上翻不会马上碰到「加载更早」 */
 const JUMP_CONTEXT = 6
+/** 跳到离最新超过这么多条的旧消息时，只渲染它附近一段，不把它到最新之间的全部消息一次画出来 */
+const JUMP_WINDOW_FROM = 80
 /** 末尾这几条不做 content-visibility：正在输出、或刚发出的消息要实时布局。 */
 const LIVE_TAIL = 2
 
@@ -247,9 +249,20 @@ export const MessageList = ({
   const jumpTarget = useChatStore((state) => state.jumpTarget)
   const target = jumpTarget?.sessionId === session.id ? jumpTarget : null
   const targetIndex = target ? messages.findIndex((message) => message.id === target.messageId) : -1
-  const jumpCount = targetIndex >= 0 ? messages.length - targetIndex + JUMP_CONTEXT : 0
-  const renderCount = Math.max(visibleCount, jumpCount)
-  const start = Math.max(0, messages.length - renderCount)
+  // 跳得很远时只画目标附近：前面 JUMP_CONTEXT 条，后面一页；往下滑再接着加载更新的，回到底部时回到最新
+  const farJump = targetIndex >= 0 && messages.length - targetIndex > JUMP_WINDOW_FROM
+  const jumpCount = targetIndex >= 0 ? (farJump ? 1 + JUMP_CONTEXT : messages.length - targetIndex + JUMP_CONTEXT) : 0
+  const jumpCut = farJump ? Math.max(0, messages.length - (targetIndex + 1 + pageSize)) : 0
+  // 结尾截掉多少条；记下截断时的会话和最后一条，发新消息或换会话就自动回到最新
+  const [tailCut, setTailCut] = useState<{ key: string; count: number } | null>(null)
+  const cutKey = `${session.id}:${lastMessageId ?? ''}`
+  const storedCut = tailCut?.key === cutKey ? tailCut.count : 0
+  const cut = target && targetIndex >= 0 ? jumpCut : storedCut
+  const end = messages.length - cut
+  const renderCount = target && targetIndex >= 0 ? (farJump ? end - targetIndex + JUMP_CONTEXT : Math.max(visibleCount, jumpCount)) : visibleCount
+  const start = Math.max(0, end - renderCount)
+  const cutRef = useRef(cut)
+  cutRef.current = cut
   const startRef = useRef(start)
   startRef.current = start
   const messageCountRef = useRef(messages.length)
@@ -378,7 +391,17 @@ export const MessageList = ({
     setVisibleCount((count) => Math.min(messageCountRef.current, count + pageSize))
   }, [getScrollEl, pageSize])
 
-  /** 惯性结束：补一次贴底，必要时加载更早的消息 */
+  /** 跳到旧消息后往下翻：在后面接上一页更新的消息（加在下方，当前位置不动） */
+  const loadNewer = useCallback(() => {
+    if (cutRef.current <= 0) {
+      return
+    }
+    const step = Math.min(cutRef.current, pageSize)
+    setTailCut((current) => (current ? { ...current, count: Math.max(0, current.count - step) } : null))
+    setVisibleCount((count) => count + step)
+  }, [pageSize])
+
+  /** 惯性结束：补一次贴底，必要时加载更早 / 更新的消息 */
   const onScrollIdle = useCallback(() => {
     const el = getScrollEl()
     if (!el || touchingRef.current) {
@@ -387,12 +410,28 @@ export const MessageList = ({
     if (startRef.current > 0 && el.scrollTop < el.clientHeight * LOAD_EARLIER_SCREENS) {
       loadEarlier()
     }
+    if (
+      cutRef.current > 0 &&
+      el.scrollHeight - el.scrollTop - el.clientHeight < el.clientHeight * LOAD_EARLIER_SCREENS
+    ) {
+      loadNewer()
+    }
     requestFollow()
-  }, [getScrollEl, loadEarlier, requestFollow])
+  }, [getScrollEl, loadEarlier, loadNewer, requestFollow])
 
   useLayoutEffect(() => {
     setVisibleCount(pageSize)
+    setTailCut(null)
   }, [session.id, pageSize])
+
+  // 从截断的旧片段回到最新后，等新的一页渲染出来再贴底
+  const stickAfterCutRef = useRef(false)
+  useLayoutEffect(() => {
+    if (cut === 0 && stickAfterCutRef.current) {
+      stickAfterCutRef.current = false
+      stickNow()
+    }
+  }, [cut, stickNow])
 
   // 内容或容器尺寸变化（出字、图片加载、键盘弹出）时请求贴底。
   useLayoutEffect(() => {
@@ -446,7 +485,13 @@ export const MessageList = ({
       }
       return
     }
-    setVisibleCount((count) => Math.max(count, jumpCount))
+    if (farJump) {
+      setTailCut({ key: cutKey, count: jumpCut })
+      setVisibleCount(end - targetIndex + JUMP_CONTEXT)
+    } else {
+      setTailCut(null)
+      setVisibleCount((count) => Math.max(count, jumpCount))
+    }
     consumeJumpTarget(nonce)
     const el = getScrollEl()
     const node = el?.querySelector<HTMLElement>(`[data-msg="${CSS.escape(messageId)}"]`)
@@ -786,8 +831,8 @@ export const MessageList = ({
         if (top < lastTopRef.current - 1 && distance > STICKY_THRESHOLD) {
           // 往上翻：停止跟随，让用户安心看历史。
           followRef.current = false
-        } else if (distance < STICKY_THRESHOLD) {
-          // 自己滑回了底部：恢复跟随。
+        } else if (distance < STICKY_THRESHOLD && cutRef.current === 0) {
+          // 自己滑回了底部：恢复跟随。（停在旧片段的底部不算，后面还有更新的消息）
           followRef.current = true
         }
       }
@@ -796,7 +841,7 @@ export const MessageList = ({
         scheduleIdle()
       }
       lastTopRef.current = top
-      setJumpVisible(distance > JUMP_THRESHOLD)
+      setJumpVisible(distance > JUMP_THRESHOLD || cutRef.current > 0)
     }
 
     el.addEventListener('touchstart', onTouchStart, { passive: true })
@@ -829,6 +874,14 @@ export const MessageList = ({
     followRef.current = true
     touchingRef.current = false
     setJumpVisible(false)
+    if (cutRef.current > 0) {
+      // 停在旧片段里：直接换成最新一页，渲染完贴底
+      stickAfterCutRef.current = true
+      lastUserScrollRef.current = 0
+      setTailCut(null)
+      setVisibleCount(pageSize)
+      return
+    }
     const bottom = el.scrollHeight - el.clientHeight
     // 离得很远时先瞬移到最后一屏，再平滑滚完：既利落，又保留「回到底部」的动感。
     if (bottom - el.scrollTop > el.clientHeight * 2) {
@@ -839,7 +892,7 @@ export const MessageList = ({
     el.scrollTo({ top: bottom, behavior: 'smooth' })
   }
 
-  const shown = messages.slice(start)
+  const shown = messages.slice(start, end)
   const selecting = selectionSession === session.id
   const compaction = autoCompact ? validCompaction(session, messages) : undefined
   const lastCovered = compaction?.msgIds.at(-1)
@@ -920,6 +973,11 @@ export const MessageList = ({
                 ) : null,
               ]
             })}
+            {cut > 0 ? (
+              <button className={styles.loadEarlier} type="button" onClick={loadNewer}>
+                {t('loadNewer')}
+              </button>
+            ) : null}
           </div>
         </div>
         {footer}

@@ -416,6 +416,7 @@ export const en = {
   memoryUsageOutput: 'Output tokens',
   memoryUsageCache: 'Cached tokens',
   loadEarlier: 'Load earlier messages',
+  loadNewer: 'Load newer messages',
   scrollToBottom: 'Scroll to bottom',
   messageRenderFailed: 'This message failed to render and was skipped.',
   searchHistoryPlaceholder: 'Search history',
