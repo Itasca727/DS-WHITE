@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useTranslate } from '../../i18n/index.js'
 import styles from './HtmlPreview.module.css'
+import { withTouchShim } from './touchShim.js'
 
 /**
  * HTML 代码块的网页预览：全屏盖一层，在沙盒 iframe 里运行。
@@ -9,6 +10,7 @@ import styles from './HtmlPreview.module.css'
  */
 export const HtmlPreview = ({ code, onClose }: { code: string; onClose: () => void }) => {
   const t = useTranslate()
+  const doc = useMemo(() => withTouchShim(code), [code])
   const [closing, setClosing] = useState(false)
   // 重新运行：换 key 让 iframe 重建
   const [run, setRun] = useState(0)
@@ -65,7 +67,7 @@ export const HtmlPreview = ({ code, onClose }: { code: string; onClose: () => vo
         <iframe
           key={run}
           title={t('htmlPreviewTitle')}
-          srcDoc={code}
+          srcDoc={doc}
           sandbox="allow-scripts allow-forms allow-modals"
           referrerPolicy="no-referrer"
         />
