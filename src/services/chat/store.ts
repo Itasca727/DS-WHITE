@@ -6,6 +6,7 @@ import { extractFileIds, getFileErrorCode, isRetryableApiError } from '../api/er
 import { cancelUpload, describeUploadError, uploadAttachment, useUploads } from '../attachments.js'
 import { UnsupportedImageError } from '../imageFormat.js'
 import { useSettings } from '../settings.js'
+import { memoryLibrarySystem } from '../memoryLibrary.js'
 import { appendBranch, getVisibleMessages, normalizeSession, selectVersion } from './branches.js'
 import * as db from './db.js'
 import { deleteRoundsFromSession } from './deleteRounds.js'
@@ -1497,7 +1498,7 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
           useSettings.getState().apiKey ?? '',
           {
             model: initial.model ?? MODEL,
-            system: [SYSTEM_PROMPT, compactionText, built.system].filter(Boolean).join('\n\n'),
+            system: [SYSTEM_PROMPT, compactionText, built.system, memoryLibrarySystem()].filter(Boolean).join('\n\n'),
             messages: built.messages,
             thinking: { type: initial.thinking ? 'enabled' : 'disabled' },
             safety_check: SAFETY_CHECK,

@@ -10,6 +10,7 @@ import { RoundSelectBar } from '../messages/RoundSelectBar.js'
 import { useRoundSelection } from '../messages/roundSelection.js'
 import { CacheBadge, lastCacheRate } from './CacheBadge.js'
 import { ContextPanel } from './ContextPanel.js'
+import { MemoryLibraryDialog } from './MemoryLibraryDialog.js'
 import { MobileHeader } from './MobileHeader.js'
 import styles from './SessionView.module.css'
 
@@ -34,6 +35,7 @@ export const SessionView = ({
   const isMobile = useIsMobile()
   const title = session.title || t('untitledChat')
   const [contextOpen, setContextOpen] = useState(false)
+  const [memoryOpen, setMemoryOpen] = useState(false)
   const inputRef = useNoPageBounce<HTMLDivElement>(isMobile)
   return (
     <div className={styles.view}>
@@ -75,8 +77,9 @@ export const SessionView = ({
         }
       />
       {contextOpen && (
-        <ContextPanel session={session} onClose={() => setContextOpen(false)} />
+        <ContextPanel session={session} onClose={() => setContextOpen(false)} onMemory={() => { setContextOpen(false); setMemoryOpen(true) }} />
       )}
+      {memoryOpen && <MemoryLibraryDialog onClose={() => setMemoryOpen(false)} />}
     </div>
   )
 }

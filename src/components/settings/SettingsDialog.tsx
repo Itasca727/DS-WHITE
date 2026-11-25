@@ -39,6 +39,7 @@ import {
 import { useTranslate, type TranslationKey, type TranslationMessage } from '../../i18n/index.js'
 import { Button } from '../base/Button.js'
 import { Modal } from '../base/Modal.js'
+import { MemoryLibraryDialog } from '../session/MemoryLibraryDialog.js'
 import { Select } from '../base/Select.js'
 import { showToast } from '../base/toastState.js'
 import { ApiKeyField, useApiKeyEditor } from './ApiKeyField.js'
@@ -73,6 +74,7 @@ const sections: { value: SettingsSection; label: TranslationKey; icon: ReactNode
 
 const SettingsContent = () => {
   const t = useTranslate()
+  const [memoryOpen, setMemoryOpen] = useState(false)
   // 打开时按调用方指定的分组选中，之后在弹窗内切换
   const [section, setSectionState] = useState(() => useSettingsDialog.getState().section)
   // 切换方向：决定新内容从哪边滑进来（点导航和左右滑动都一样）
@@ -142,6 +144,7 @@ const SettingsContent = () => {
               <FontSizeSetting />
               <AutoCollapseThinkingSetting />
               <AutoCompactSetting />
+              <SettingCell label="长期记忆库" status={null} action={<Button variant="outlined" size="m" onClick={() => setMemoryOpen(true)}>管理</Button>} />
               <SoundEffectsSetting />
               <TtsVoiceSetting />
               <LocationSetting />
@@ -174,6 +177,7 @@ const SettingsContent = () => {
           )}
         </div>
       </Modal>
+      {memoryOpen && <MemoryLibraryDialog onClose={() => setMemoryOpen(false)} />}
       {historyImport.file ? <ImportConfirm historyImport={historyImport} /> : null}
       {historyDelete.opened ? <DeleteAllConfirm historyDelete={historyDelete} /> : null}
     </>

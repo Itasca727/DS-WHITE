@@ -83,9 +83,11 @@ const fmt = (value: number) => Math.round(value).toLocaleString("en-US");
 export const ContextPanel = ({
   session,
   onClose,
+  onMemory,
 }: {
   session: Session;
   onClose: () => void;
+  onMemory?: () => void;
 }) => {
   const t = useTranslate();
   const maskRef = useRef<HTMLDivElement>(null);
@@ -301,6 +303,7 @@ export const ContextPanel = ({
             ?
           </button>
           <div className={styles.headSpacer} />
+          {onMemory && <Button variant="outlined" size="s" onClick={onMemory}>记忆库</Button>}
           <button
             className={styles.close}
             type="button"
