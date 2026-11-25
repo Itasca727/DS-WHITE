@@ -7,7 +7,8 @@ import { cancelUpload, describeUploadError, uploadAttachment, useUploads } from 
 import { UnsupportedImageError } from '../imageFormat.js'
 import { useSettings } from '../settings.js'
 import { memoryLibrarySystem } from '../memoryLibrary.js'
-import { appendBranch, getVisibleMessages, normalizeSession, selectVersion } from './branches.js'
+import { noteMemoryReply } from './memoryTasks.js'
+import { appendBranch, getVisibleMessages, normalizeSession, revealMessage, selectVersion } from './branches.js'
 import * as db from './db.js'
 import { deleteRoundsFromSession } from './deleteRounds.js'
 import {
@@ -686,6 +687,21 @@ let jumpNonce = 0
 export const openSessionAt = (id: string, messageId: string | null) => {
   set({ jumpTarget: messageId ? { sessionId: id, messageId, nonce: ++jumpNonce } : null })
   selectSession(id)
+}
+
+/** 收藏可以定位到非当前分支的具体回复版本。 */
+export const openFavoriteAt = async (id: string, messageId: string) => {
+  if (get().importingHistory || deletingSessions.has(id) || getStreamController(id)) throw new Error('会话正在生成或处理数据，请稍后跳转')
+  if (!get().sessions.some(s => s.id === id)) throw new Error('原会话已不存在，仍可查看收藏快照')
+  selectSession(id)
+  await ensureSessionLoaded(id)
+  const session = getSession(id)
+  if (!session || getStreamController(id) || get().importingHistory || deletingSessions.has(id)) throw new Error('暂时无法打开原会话')
+  const next = revealMessage(session, messageId)
+  if (!next) throw new Error('原回复已删除或导入后 ID 变化，仍可查看收藏快照')
+  updateSession(id, () => next)
+  persist(id)
+  openSessionAt(id, messageId)
 }
 
 /** 对话列表定位完成（或放弃）后清掉 */
@@ -1498,7 +1514,7 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
           useSettings.getState().apiKey ?? '',
           {
             model: initial.model ?? MODEL,
-            system: [SYSTEM_PROMPT, compactionText, built.system, memoryLibrarySystem()].filter(Boolean).join('\n\n'),
+            system: [SYSTEM_PROMPT, compactionText, built.system, memoryLibrarySystem(undefined, sessionId, prepared.question.content)].filter(Boolean).join('\n\n'),
             messages: built.messages,
             thinking: { type: initial.thinking ? 'enabled' : 'disabled' },
             safety_check: SAFETY_CHECK,
@@ -1614,6 +1630,10 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
     }
     if (reply.status === 'done' && !request.prefix) {
       replyDoneListeners.forEach((listener) => listener())
+      const session = getSession(sessionId)
+      if (session && reply.stopReason !== 'refusal') {
+        void noteMemoryReply(session, reply.id, useSettings.getState().apiKey ?? '').catch(error => console.warn('自动整理记忆未完成', error))
+      }
     }
   }
 }

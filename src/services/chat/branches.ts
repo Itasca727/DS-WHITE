@@ -115,3 +115,21 @@ export const selectVersion = (original: Session, messageId: string): Session => 
     ),
   }
 }
+
+/** 恢复目标回复的祖先路径，保留其后已选分支，不删除任何版本。 */
+export const revealMessage = (original: Session, messageId: string): Session | undefined => {
+  const session = normalizeSession(original)
+  const byId = new Map(session.messages.map(m => [m.id, m]))
+  const path: Message[] = [], seen = new Set<string>()
+  let current = byId.get(messageId)
+  if (!current) return undefined
+  while (current) {
+    if (seen.has(current.id)) return undefined
+    seen.add(current.id); path.unshift(current)
+    if (current.parentId == null) break
+    current = byId.get(current.parentId)
+    if (!current) return undefined
+  }
+  const choices = new Map(path.slice(0,-1).map((m,i)=>[m.id,path[i+1]!.id]))
+  return { ...session, rootMessageId: path[0]!.id, messages: session.messages.map(m => choices.has(m.id) ? {...m,selectedChildId:choices.get(m.id)} : m) }
+}

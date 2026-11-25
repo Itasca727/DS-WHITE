@@ -39,6 +39,7 @@ import {
 import { useTranslate, type TranslationKey, type TranslationMessage } from '../../i18n/index.js'
 import { Button } from '../base/Button.js'
 import { Modal } from '../base/Modal.js'
+import { FavoritesDialog } from '../session/FavoritesDialog.js'
 import { MemoryLibraryDialog } from '../session/MemoryLibraryDialog.js'
 import { Select } from '../base/Select.js'
 import { showToast } from '../base/toastState.js'
@@ -75,6 +76,7 @@ const sections: { value: SettingsSection; label: TranslationKey; icon: ReactNode
 const SettingsContent = () => {
   const t = useTranslate()
   const [memoryOpen, setMemoryOpen] = useState(false)
+  const [favoritesOpen, setFavoritesOpen] = useState(false)
   // 打开时按调用方指定的分组选中，之后在弹窗内切换
   const [section, setSectionState] = useState(() => useSettingsDialog.getState().section)
   // 切换方向：决定新内容从哪边滑进来（点导航和左右滑动都一样）
@@ -145,6 +147,7 @@ const SettingsContent = () => {
               <AutoCollapseThinkingSetting />
               <AutoCompactSetting />
               <SettingCell label="长期记忆库" status={null} action={<Button variant="outlined" size="m" onClick={() => setMemoryOpen(true)}>管理</Button>} />
+              <SettingCell label="回复收藏夹" status={null} action={<Button variant="outlined" size="m" onClick={() => setFavoritesOpen(true)}>打开</Button>} />
               <SoundEffectsSetting />
               <TtsVoiceSetting />
               <LocationSetting />
@@ -177,6 +180,7 @@ const SettingsContent = () => {
           )}
         </div>
       </Modal>
+      {favoritesOpen && <FavoritesDialog onClose={() => setFavoritesOpen(false)} onJump={closeSettings} />}
       {memoryOpen && <MemoryLibraryDialog onClose={() => setMemoryOpen(false)} />}
       {historyImport.file ? <ImportConfirm historyImport={historyImport} /> : null}
       {historyDelete.opened ? <DeleteAllConfirm historyDelete={historyDelete} /> : null}

@@ -84,10 +84,12 @@ export const ContextPanel = ({
   session,
   onClose,
   onMemory,
+  onFavorites,
 }: {
   session: Session;
   onClose: () => void;
   onMemory?: () => void;
+  onFavorites?: () => void;
 }) => {
   const t = useTranslate();
   const maskRef = useRef<HTMLDivElement>(null);
@@ -303,6 +305,7 @@ export const ContextPanel = ({
             ?
           </button>
           <div className={styles.headSpacer} />
+          {onFavorites && <Button variant="outlined" size="s" onClick={onFavorites}>收藏</Button>}
           {onMemory && <Button variant="outlined" size="s" onClick={onMemory}>记忆库</Button>}
           <button
             className={styles.close}

@@ -12,3 +12,8 @@
 .entry { border-top: 1px solid var(--dsw-alias-border-l2); padding-top: 9px; display: flex; flex-direction: column; gap: 8px; }
 .memoryText { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 180px; overflow: auto; font-size: 14px; }
 .notice { position: sticky; top: 0; z-index: 1; padding: 10px; border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-base); border-radius: 8px; font-size: 13px; overflow-wrap: anywhere; }
+
+.section input[type='number'] { width: 76px; box-sizing: border-box; padding: 7px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 7px; background: var(--dsw-alias-bg-layer-2); color: inherit; font: inherit; }
+.section progress { width: 100%; accent-color: currentColor; }
+
+.section input[type="text"] { box-sizing: border-box; min-width: 0; max-width: 100%; background: var(--dsw-alias-bg-layer-2); color: inherit; border: 1px solid var(--dsw-alias-border-l2); border-radius: 7px; padding: 8px; font: inherit; }

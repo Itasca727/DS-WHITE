@@ -1,3 +1,5 @@
+import { useFavorites, toggleFavorite } from '../../services/favorites.js'
+import { showToast } from '../base/toastState.js'
 import { useTranslate } from '../../i18n/index.js'
 import clsx from 'clsx'
 import { memo, useEffect } from 'react'
@@ -55,6 +57,7 @@ export const AssistantMessage = memo(function AssistantMessage({
     .filter(Boolean)
     .join('\n\n')
   const copyText = responseText || notice?.text
+  const favorited = useFavorites(state => state.items.some(x => x.sessionId === sessionId && x.messageId === message.id))
   const compacting = useChatStore((state) => streaming && Boolean(state.compacting[sessionId]))
   const waiting =
     compacting || (streaming && view.steps.length === 0 && !view.answer && !message.thinking)
@@ -152,6 +155,7 @@ export const AssistantMessage = memo(function AssistantMessage({
           <BranchSwitcher versions={versions} disabled={busy} onSelect={onSelectVersion} />
           <div className={clsx(styles.actions, isLast && styles.alwaysShow)}>
             {copyText ? <CopyButton text={copyText} /> : null}
+            {responseText && !refused && (message.status === 'done' || message.status === 'stopped') ? <IconButton icon={<span aria-hidden="true" style={{fontSize:18,lineHeight:1,color:favorited?'#d69b31':undefined}}>{favorited?'★':'☆'}</span>} tooltip={favorited?'取消收藏':'收藏回复'} tooltipPlacement="bottom" onClick={() => {try { const title=useChatStore.getState().sessions.find(s=>s.id===sessionId)?.title || '未命名对话'; showToast(toggleFavorite(sessionId,message.id,title,responseText)?'已收藏回复':'已取消收藏') } catch {showToast('收藏保存失败，请检查本机存储空间')} }} /> : null}
             {responseText && !refused ? (
               <ReadAloudButton messageId={message.id} text={responseText} />
             ) : null}

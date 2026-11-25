@@ -15,7 +15,7 @@ function load(relative, dependencies) {
   const out = ts.transpileModule(code, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX }, reportDiagnostics: true })
   assert.deepEqual(out.diagnostics.filter(d => d.category === ts.DiagnosticCategory.Error), [])
   const module = { exports: {} }
-  vm.runInNewContext(out.outputText, { module, exports: module.exports, localStorage, require: id => { if (!(id in dependencies)) throw Error(`Unexpected dependency: ${id}`); return dependencies[id] } })
+  vm.runInNewContext(out.outputText, { module, exports: module.exports, localStorage, TextEncoder, require: id => { if (!(id in dependencies)) throw Error(`Unexpected dependency: ${id}`); return dependencies[id] } })
   return module.exports
 }
 const lib = load('src/services/memoryLibrary.ts', { zustand: { create }, '../utils/id.js': { createId: () => `id-${++nextId}` } })

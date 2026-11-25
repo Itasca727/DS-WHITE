@@ -170,3 +170,6 @@
     --search-row-site-logo-color: var(--dsw-alias-interactive-bg-hover);
   }
 }
+
+/* 手机上不依赖悬停，历史回复也能收藏。 */
+@media (hover: none) { .actions { opacity: 1; } }
